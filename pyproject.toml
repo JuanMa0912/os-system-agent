@@ -29,18 +29,18 @@ classifiers = [
 ]
 dependencies = []
 
-[project.optional-dependencies]
+[project.urls]
+Homepage = "https://github.com/JuanMa0912/os-system-agent"
+Repository = "https://github.com/JuanMa0912/os-system-agent"
+Issues = "https://github.com/JuanMa0912/os-system-agent/issues"
+
+[dependency-groups]
 dev = [
   "pytest>=8.0",
   "ruff>=0.6",
   "mypy>=1.11",
   "pyyaml>=6.0",
 ]
-
-[project.urls]
-Homepage = "https://github.com/JuanMa0912/os-system-agent"
-Repository = "https://github.com/JuanMa0912/os-system-agent"
-Issues = "https://github.com/JuanMa0912/os-system-agent/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/os_system_agent"]

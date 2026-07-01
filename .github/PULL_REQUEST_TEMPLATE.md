@@ -22,6 +22,6 @@ Summary of the change and the problem it solves.
 
 ## Verification
 
-- [ ] `ruff check .` and `ruff format --check .`
-- [ ] `pytest`
+- [ ] `uv run ruff check .` and `uv run ruff format --check .`
+- [ ] `uv run pytest`
 - [ ] Manual verification (describe):

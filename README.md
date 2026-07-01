@@ -44,14 +44,25 @@ evals/                 Versioned golden cases (severity, redaction)
 
 ## Quickstart (development)
 
-```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate  |  Unix: source .venv/bin/activate
-pip install -e ".[dev]"
+Uses [uv](https://docs.astral.sh/uv/) for reproducible envs (a committed
+`uv.lock` pins every version):
 
-ruff check .
-pytest
+```bash
+# install uv once: https://docs.astral.sh/uv/getting-started/installation/
+uv sync                 # creates .venv from the lockfile
+
+uv run ruff check .
+uv run pytest
 ```
+
+<details><summary>Without uv (plain pip)</summary>
+
+```bash
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e . pytest ruff mypy pyyaml
+ruff check . && pytest
+```
+</details>
 
 Then to configure a real deployment:
 

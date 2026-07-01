@@ -15,18 +15,20 @@ See `CLAUDE.md` for the full operating rules.
 
 ## Local setup
 
+This project uses [uv](https://docs.astral.sh/uv/). The committed `uv.lock`
+pins exact versions so the env is identical on every machine.
+
 ```bash
-python -m venv .venv
-# Windows: .venv\Scripts\activate  |  Unix: source .venv/bin/activate
-pip install -e ".[dev]"
+# install uv once: https://docs.astral.sh/uv/getting-started/installation/
+uv sync
 ```
 
 ## Before opening a PR
 
 ```bash
-ruff check .
-ruff format --check .
-pytest
+uv run ruff check .
+uv run ruff format --check .
+uv run pytest
 ```
 
 ## Hard rules
