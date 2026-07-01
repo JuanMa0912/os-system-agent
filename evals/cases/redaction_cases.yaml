@@ -1,0 +1,14 @@
+# Golden cases for secret redaction (os_system_agent.redaction.redact).
+# `must_not_contain` must be absent from the output. Values below are FAKE.
+- name: telegram_bot_token
+  input: "bot token 123456789:AAH-abcdefghijklmnopqrstuvwxyz0123456 ready"
+  must_not_contain: "AAH-abcdefghijklmnopqrstuvwxyz0123456"
+- name: postgres_uri_password
+  input: "postgres://etl_monitor:s3cr3tP4ssw0rd@db.internal:5432/reporting"
+  must_not_contain: "s3cr3tP4ssw0rd"
+- name: openai_style_key
+  input: "using key sk-abcdefghijklmnopqrstuvwxyz012345 now"
+  must_not_contain: "sk-abcdefghijklmnopqrstuvwxyz012345"
+- name: env_style_secret
+  input: "TELEGRAM_BOT_TOKEN=super-secret-value-xyz"
+  must_not_contain: "super-secret-value-xyz"

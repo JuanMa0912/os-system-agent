@@ -1,0 +1,27 @@
+# Golden cases for Severity classification (os_system_agent.severity).
+# Each case is executed by tests/test_evals.py.
+- name: fresh_within_window
+  delay_minutes: 10
+  warning_after_minutes: 60
+  critical_after_minutes: 120
+  expected: INFO
+- name: late_but_recoverable
+  delay_minutes: 75
+  warning_after_minutes: 60
+  critical_after_minutes: 120
+  expected: WARNING
+- name: exactly_at_warning_threshold
+  delay_minutes: 60
+  warning_after_minutes: 60
+  critical_after_minutes: 120
+  expected: WARNING
+- name: critically_late
+  delay_minutes: 200
+  warning_after_minutes: 60
+  critical_after_minutes: 120
+  expected: CRITICAL
+- name: unknown_delay_fails_closed
+  delay_minutes: null
+  warning_after_minutes: 60
+  critical_after_minutes: 120
+  expected: CRITICAL

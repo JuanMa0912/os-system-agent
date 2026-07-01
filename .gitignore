@@ -1,0 +1,30 @@
+# Secrets & credentials
+.env
+.env.local
+*.pem
+*.key
+*.ppk
+
+# Logs & local data
+*.log
+audit-ledger.jsonl
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+.venv/
+venv/
+build/
+dist/
+*.egg-info/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
+CLAUDE.local.md

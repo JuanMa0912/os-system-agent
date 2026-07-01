@@ -1,0 +1,11 @@
+# config/server232.ssh_config.example
+# Copy into ~/.ssh/config and replace placeholders.
+
+Host server232
+  HostName <SERVER_232_IP_OR_DNS>
+  User etl_monitor
+  IdentityFile ~/.ssh/os_system_agent_server232
+  IdentitiesOnly yes
+  ServerAliveInterval 30
+  ServerAliveCountMax 3
+  StrictHostKeyChecking yes

@@ -1,0 +1,59 @@
+{
+  // Example only. Validate against your installed OpenClaw version.
+  // Do not paste real tokens here.
+  "gateway": {
+    "bind": "loopback",
+    "auth": {
+      "token": "${OPENCLAW_GATEWAY_TOKEN}"
+    }
+  },
+  "session": {
+    "dmScope": "per-channel-peer"
+  },
+  "agents": {
+    "defaults": {
+      "sandbox": {
+        "mode": "all",
+        "backend": "docker",
+        "scope": "session"
+      },
+      "heartbeat": {
+        "every": "0m"
+      }
+    },
+    "list": [
+      {
+        "id": "os_system_agent",
+        "name": "OS System Agent",
+        "description": "Controlled ETL monitoring and approved operations assistant"
+      }
+    ]
+  },
+  "channels": {
+    "telegram": {
+      "enabled": false,
+      "token": "${TELEGRAM_BOT_TOKEN}",
+      "allowFrom": ["<telegram_user_id>"],
+      "groupPolicy": "allowlist",
+      "groups": {
+        "<telegram_group_id>": {
+          "requireMention": true
+        }
+      }
+    },
+    "whatsapp": {
+      "enabled": false,
+      "dmPolicy": "allowlist",
+      "allowFrom": ["+57XXXXXXXXXX"],
+      "groupPolicy": "allowlist",
+      "groups": {
+        "<whatsapp_group_jid>": {
+          "requireMention": true
+        }
+      }
+    }
+  },
+  "plugins": {
+    "allowlist": []
+  }
+}

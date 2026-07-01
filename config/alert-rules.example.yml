@@ -1,0 +1,22 @@
+# config/alert-rules.example.yml
+# Example only. Replace job ids/paths with your own neutral identifiers.
+
+jobs:
+  - id: daily_sales
+    name: Daily Sales Load
+    server: server232
+    schedule: "daily"
+    expected_finish_before: "07:00"
+    freshness:
+      type: "file_or_db"
+      max_delay_minutes_warning: 60
+      max_delay_minutes_critical: 120
+    paths:
+      logs: "/opt/etl/logs/daily_sales"
+      output: "/opt/etl/output/daily_sales"
+    db_validation:
+      enabled: false
+      query_name: "max_load_date"
+    alerts:
+      telegram: true
+      whatsapp: false
