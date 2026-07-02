@@ -24,6 +24,11 @@ Verification:
 - `openclaw gateway status`
 - dashboard local only
 
+**Status: DONE.** OpenClaw `2026.6.11` on WSL2 Ubuntu 24.04 (Node 24). Gateway
+bound to `127.0.0.1:18789`, systemd user service, Tailscale off, no channels.
+Model provider: Ollama Cloud (`ollama-cloud/gpt-oss:120b`, free tier — local
+model not viable: no GPU / ~8 GB RAM). See `docs/openclaw-phase1-runbook.md`.
+
 ## T003 — Configure Telegram test alert
 
 Risk: low  
@@ -103,3 +108,10 @@ Approval required: no
 Verification:
 
 - no critical findings before enabling channels
+
+**Status: DONE.** `openclaw security audit --deep` = **0 critical**. Hardening:
+web/browser tools denied, insecure Control UI auth off, memory-search off,
+unused skills disabled. Accepted warns: `weak_tier` (cost trade-off),
+`trusted_proxies` (local-only), `probe_failed` (clears when the command owner is
+set in T003). Sandbox `off` (no Docker WSL integration) — re-enable before
+Phase 2 / channels. See `docs/openclaw-phase1-runbook.md`.
