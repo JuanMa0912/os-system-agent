@@ -57,8 +57,9 @@ is one monitoring implementation.
 ## Required scripts / files
 
 - `src/os_system_agent/mcp_server.py` — the MCP server (new).
-- `~/.openclaw/workspace/skills/estado-etl/SKILL.md` — the `/estado` skill (on
-  the box; a committed template lives in `config/skills/estado-etl.SKILL.md`).
+- `~/.openclaw/workspace/skills/estado/SKILL.md` — the `/estado` skill (on the
+  box; a committed template lives in `config/skills/estado.SKILL.md`). The skill
+  `name: estado` is what defines the `/estado` command.
 - New dependency: `mcp` (official Python SDK) for a correct stdio server.
 
 ## Required credentials (no secrets in repo)

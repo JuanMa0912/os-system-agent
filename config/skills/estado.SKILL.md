@@ -1,5 +1,5 @@
 ---
-name: estado-etl
+name: estado
 description: Read-only ETL status on demand — returns the current daily report. Monitor only; never executes.
 user-invocable: true
 disable-model-invocation: false
@@ -7,12 +7,13 @@ command-dispatch: tool
 command-tool: REPLACE_WITH_PROBED_TOOL_NAME
 ---
 
-# estado-etl — read-only ETL status
+# estado — read-only ETL status
 
-Install this on the gateway host at
-`~/.openclaw/workspace/skills/estado-etl/SKILL.md`. Before use, set
-`command-tool` above to the exact tool name shown by `openclaw mcp probe` for the
-`os-system-agent` MCP server (typically `estado_etl`, possibly namespaced).
+The skill `name` above is what defines the slash command, so this exposes
+**`/estado`**. Install it on the gateway host at
+`~/.openclaw/workspace/skills/estado/SKILL.md`. Before use, set `command-tool`
+to the exact tool name shown by `openclaw mcp probe` for the `os-system-agent`
+MCP server (typically `estado_etl`, possibly namespaced).
 
 ## What to do
 

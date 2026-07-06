@@ -32,11 +32,12 @@ Files: `tests/test_mcp_estado.py`.
 Risk: low
 Approval required: no
 
-Files: `config/skills/estado-etl.SKILL.md`.
+Files: `config/skills/estado.SKILL.md`.
 
-- `user-invocable: true`, `command-dispatch: tool`, `command-tool: <mcp tool>`,
-  owner-only; body: "call `estado_etl`, return it verbatim; monitor only, never
-  execute/rerun anything." `command-tool` filled from the box's probe output.
+- `name: estado` (defines the `/estado` command), `user-invocable: true`,
+  `command-dispatch: tool`, `command-tool: <mcp tool>`, owner-only; body: "call
+  `estado_etl`, return it verbatim; monitor only, never execute/rerun anything."
+  `command-tool` filled from the box's probe output.
 
 ## T204 — Register + wire on MMAUTOML01 (box, guided)
 
@@ -47,7 +48,7 @@ Approval required: yes (touches OpenClaw config)
 - `openclaw mcp add` the stdio server (cwd=repo, env `OS_ETL_CATALOG` +
   `OS_SERVER_ALIAS`); confirm it probes OK.
 - `openclaw mcp tools` include-filter → only `estado_etl`.
-- Copy the skill template to `~/.openclaw/workspace/skills/estado-etl/SKILL.md`;
+- Copy the skill template to `~/.openclaw/workspace/skills/estado/SKILL.md`;
   set `command-tool` to the probed tool name.
 - `systemctl --user restart openclaw-gateway`.
 
