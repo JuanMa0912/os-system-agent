@@ -9,6 +9,9 @@
 *.log
 audit-ledger.jsonl
 
+# Real ETL catalog (internal job/table/path names) — keep only the example
+config/alert-rules.yml
+
 # Python
 __pycache__/
 *.py[cod]

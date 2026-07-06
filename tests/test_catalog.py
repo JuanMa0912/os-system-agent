@@ -16,11 +16,12 @@ def test_example_catalog_loads_with_expected_fields():
     assert job.id == "daily_sales"
     assert job.name == "Daily Sales Load"
     assert job.server == "server232"
-    assert job.expected_finish_before == "07:00"
-    assert job.freshness.warning_after_minutes == 60
-    assert job.freshness.critical_after_minutes == 120
-    assert job.log_path == "/opt/etl/logs/daily_sales"
-    assert job.output_path == "/opt/etl/output/daily_sales"
+    assert job.systemd_unit == "daily_sales.service"
+    assert job.expected_finish_before == "08:00"
+    assert job.freshness.warning_after_minutes == 1500
+    assert job.freshness.critical_after_minutes == 1560
+    assert job.log_path == "/var/log/daily_sales"
+    assert job.output_path is None
     assert job.alert_telegram is True
 
 

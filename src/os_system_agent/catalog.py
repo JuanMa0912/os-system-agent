@@ -35,6 +35,7 @@ class EtlJob:
     server: str
     schedule: str
     freshness: FreshnessRule
+    systemd_unit: str | None = None
     expected_finish_before: str | None = None
     log_path: str | None = None
     output_path: str | None = None
@@ -97,6 +98,7 @@ def _parse_job(raw: Any, *, index: int) -> EtlJob:
             warning_after_minutes=warning,
             critical_after_minutes=critical,
         ),
+        systemd_unit=(str(raw["systemd_unit"]) if raw.get("systemd_unit") is not None else None),
         expected_finish_before=(
             str(raw["expected_finish_before"])
             if raw.get("expected_finish_before") is not None

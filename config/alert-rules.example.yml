@@ -1,22 +1,21 @@
 # config/alert-rules.example.yml
-# Example only. Replace job ids/paths with your own neutral identifiers.
+# Example only. Copy to config/alert-rules.yml (gitignored) with your real jobs.
+# Phase 1 monitors systemd services, so each job names its `systemd_unit`; the
+# freshness thresholds are in MINUTES and should match the job's cadence
+# (a daily job is only "late" after ~a day, not after an hour).
 
 jobs:
   - id: daily_sales
     name: Daily Sales Load
     server: server232
-    schedule: "daily"
-    expected_finish_before: "07:00"
+    systemd_unit: daily_sales.service
+    schedule: "daily 07:00"
+    expected_finish_before: "08:00"
     freshness:
-      type: "file_or_db"
-      max_delay_minutes_warning: 60
-      max_delay_minutes_critical: 120
+      max_delay_minutes_warning: 1500    # ~25h — missed today's run
+      max_delay_minutes_critical: 1560   # ~26h
     paths:
-      logs: "/opt/etl/logs/daily_sales"
-      output: "/opt/etl/output/daily_sales"
-    db_validation:
-      enabled: false
-      query_name: "max_load_date"
+      logs: "/var/log/daily_sales"       # optional; systemd status is the main signal
     alerts:
       telegram: true
       whatsapp: false

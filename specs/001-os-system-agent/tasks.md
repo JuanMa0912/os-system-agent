@@ -82,8 +82,11 @@ Verification:
 
 **Status: DONE (dry-run).** `catalog.py` (fail-closed job-catalog loader),
 `monitors/freshness.py` (pure `evaluate_freshness` → severity), and
-`scripts/collect_etl_status.py` / `check_etl_freshness.py` (dry-run by default,
-`--live` fails closed). Mocked tests pass. Live read-only check pending M4.
+`scripts/collect_etl_status.py` / `check_etl_freshness.py` (dry-run by default).
+**Live read-only collection implemented** via `monitors/systemd.py`:
+`--live` runs `systemctl show <unit>` over the read-only SSH allowlist, parses
+`Result`/`ExecMainExitTimestamp`, and classifies freshness. Verified end-to-end
+against the real ETL server (`etl_monitor` user, key auth).
 
 ## T007 — Build daily report
 
