@@ -38,6 +38,13 @@ Verification:
 
 - Test alert received.
 
+**Status: DONE.** Bot added via `openclaw channels add`, running in polling mode.
+Operator paired and locked down: `channels.telegram.allowFrom` + auto-set
+`commands.ownerAllowFrom` = single operator id. Round-trip verified (operator DM
+→ gpt-oss reply). `security audit --deep` still 0 critical. Known accepted warn:
+`probe_failed` (deep-probe operator scope, not a vuln). See
+`docs/openclaw-phase1-runbook.md` §8.
+
 ## T004 — Configure SSH alias server232
 
 Risk: medium  

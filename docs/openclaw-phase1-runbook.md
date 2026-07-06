@@ -83,7 +83,7 @@ Result: **0 critical**. The three remaining warnings are accepted for Phase 1:
 | --- | --- |
 | `models.weak_tier` (gpt-oss below GPT-5/Claude 4.5) | **Accepted** cost trade-off. Revisit before the agent can *execute* (Phase 2+). |
 | `gateway.trusted_proxies_missing` | **Non-issue** — Control UI is local-only, no reverse proxy. |
-| `gateway.probe_failed` (`operator.read`) | Resolves once a **command owner** is configured (Phase M3, with the Telegram user id). |
+| `gateway.probe_failed` (`operator.read`) | **Accepted** — the deep audit's own probe lacks operator scope over the local gateway; not a vulnerability. (Configuring the command owner did **not** clear it.) |
 
 ## 6. Sandbox decision
 
@@ -101,9 +101,40 @@ any channel**, via Docker WSL integration or a lighter alternative.
 - Channels: none. Skills/hooks: minimal.
 - Model: `ollama-cloud/gpt-oss:120b`.
 
+## 8. Telegram channel (M3)
+
+The first channel. Added security-first: paired and allowlisted to a single
+operator before it is trusted. Telegram defaults to **pairing**, so unknown
+senders are gated until approved.
+
+```bash
+openclaw channels add              # pick Telegram, paste the bot token (@BotFather)
+systemctl --user restart openclaw-gateway
+openclaw channels status           # expect: telegram ... running, mode:polling
+```
+
+Capture the operator's Telegram id via pairing (no manual lookup): DM the bot
+once, then:
+
+```bash
+openclaw pairing list --channel telegram
+openclaw pairing approve telegram <CODE>   # also sets command owner if it was empty
+```
+
+Lock it to that single operator:
+
+```bash
+openclaw config set channels.telegram.allowFrom '["<telegram_user_id>"]'
+# commands.ownerAllowFrom is set automatically by the first pairing approve
+systemctl --user restart openclaw-gateway
+```
+
+Verify: the operator DMs the bot and gets a model reply; other senders are gated
+by pairing + allowlist. The Telegram bot token lives in config (`token:config`)
+— migrate to a SecretRef (`openclaw secrets`) as later hardening.
+
 ## Next
 
-- **M3** — Telegram channel: create a bot with `@BotFather`, `openclaw channels
-  add telegram`, set `commands.ownerAllowFrom`, allowlist + pairing, redacted
-  test alert.
-- **M4** — read-only SSH monitoring of the ETL server (`etl_monitor` user).
+- **M4** — read-only SSH monitoring of the ETL server (`etl_monitor` user), and
+  the real ETL job catalog in `config/alert-rules.example.yml`.
+- **M5** — first daily report wired to the Telegram channel.
