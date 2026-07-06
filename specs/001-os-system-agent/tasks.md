@@ -65,6 +65,11 @@ Verification:
 
 - outputs hostname/date/uptime/disk/service status
 
+**Status: PARTIAL.** Building block done: `ssh_client.run_read_only()` runs an
+allowlist-verified command over SSH (BatchMode, fails closed via
+`assert_read_only`). Wiring the healthcheck script to a live server lands with
+M4 (real SSH access + `etl_monitor` user).
+
 ## T006 — Build ETL freshness collector
 
 Risk: low  
@@ -75,6 +80,11 @@ Verification:
 - mocked folder/log tests pass
 - real read-only check returns status
 
+**Status: DONE (dry-run).** `catalog.py` (fail-closed job-catalog loader),
+`monitors/freshness.py` (pure `evaluate_freshness` → severity), and
+`scripts/collect_etl_status.py` / `check_etl_freshness.py` (dry-run by default,
+`--live` fails closed). Mocked tests pass. Live read-only check pending M4.
+
 ## T007 — Build daily report
 
 Risk: low  
@@ -84,6 +94,10 @@ Verification:
 
 - report generated locally
 - secrets redacted
+
+**Status: DONE.** `reports/daily.py` renders the §13 daily report and incident
+alert; all evidence passes through `redact()`; CRITICAL marks "Requires approval:
+yes". Verified by tests + `collect_etl_status.py` dry-run.
 
 ## T008 — Build approval parser
 

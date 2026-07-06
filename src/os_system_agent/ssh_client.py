@@ -7,6 +7,9 @@ execution lands in a later phase behind the approval parser.
 
 from __future__ import annotations
 
+import subprocess
+from dataclasses import dataclass
+
 # Commands whose first token is allowed for autonomous read-only checks.
 READ_ONLY_ALLOWLIST: frozenset[str] = frozenset(
     {
@@ -104,3 +107,37 @@ def assert_read_only(command: str) -> None:
     """Raise :class:`UnsafeCommandError` if ``command`` is not read-only."""
     if not is_read_only(command):
         raise UnsafeCommandError(f"command is not an allowlisted read-only check: {command!r}")
+
+
+@dataclass(frozen=True)
+class CommandResult:
+    """Captured result of a read-only SSH command."""
+
+    command: str
+    exit_code: int
+    stdout: str
+    stderr: str
+
+
+def run_read_only(alias: str, command: str, *, timeout: float = 15.0) -> CommandResult:
+    """Run an allowlisted read-only ``command`` on the SSH ``alias``.
+
+    Fails closed: :func:`assert_read_only` is enforced *before* any connection
+    is attempted, so a non-allowlisted command never reaches the server.
+    ``BatchMode=yes`` disables interactive prompts (no password/passphrase).
+    """
+    assert_read_only(command)
+    ssh_cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", alias, command]
+    proc = subprocess.run(
+        ssh_cmd,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    return CommandResult(
+        command=command,
+        exit_code=proc.returncode,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+    )
