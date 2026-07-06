@@ -133,8 +133,56 @@ Verify: the operator DMs the bot and gets a model reply; other senders are gated
 by pairing + allowlist. The Telegram bot token lives in config (`token:config`)
 — migrate to a SecretRef (`openclaw secrets`) as later hardening.
 
+## 9. Daily report push (M5)
+
+The push closes the loop: collect live status → render the daily report →
+deliver it over the Telegram channel, on a schedule, with no human in the loop.
+
+The delivery path was verified by hand first (outbound send works):
+
+```bash
+openclaw message send --channel telegram --target <chat_id> --message "test"
+# -> "Sent via telegram. Message ID: ..." and it arrives in the chat
+```
+
+`scripts/send_daily_report.py` wraps the collector and the send. It is
+dry-run/fail-closed by default (CLAUDE.md §14): it only prints unless `--send`
+is given, and refuses to send without a target.
+
+```bash
+# dry-run: print the report, deliver nothing
+uv run python scripts/send_daily_report.py --live --catalog config/alert-rules.yml
+
+# real push (what the timer runs)
+uv run python scripts/send_daily_report.py --live --send \
+    --channel telegram --target <chat_id> --catalog config/alert-rules.yml
+```
+
+The recipient id is never committed — pass it with `--target` or the
+`OS_TELEGRAM_TARGET` env var. `--only-incidents` delivers only when something is
+WARNING or worse (for a second, more frequent alert-only timer that stays quiet
+on healthy days).
+
+Schedule it with a **systemd user timer** (so it can reach the local gateway):
+copy `config/systemd/os-system-agent-daily.{service,timer}.example` into
+`~/.config/systemd/user/`, fill in the paths + `OS_TELEGRAM_TARGET`, then:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now os-system-agent-daily.timer
+loginctl enable-linger "$USER"          # run even when not logged in
+systemctl --user start os-system-agent-daily.service   # one-shot smoke test
+systemctl --user list-timers | grep os-system-agent    # confirm next run
+```
+
+The service is `Type=oneshot` with a 180s `TimeoutStartSec`, so a stuck run
+never hangs the box. It stays **read-only** — it reads status and sends a
+message; it never touches the ETL server's state. Approval-gated execution is
+Phase 2.
+
 ## Next
 
-- **M4** — read-only SSH monitoring of the ETL server (`etl_monitor` user), and
-  the real ETL job catalog in `config/alert-rules.example.yml`.
-- **M5** — first daily report wired to the Telegram channel.
+- **Pull (read-only)** — a single narrow `estado_etl` tool/skill so the operator
+  can ask "how are the ETLs?" over Telegram, without re-opening execution.
+- **Phase 2** — approval-gated ETL reruns (`APPROVE` format + dry-run + audit
+  ledger). Re-enable the OpenClaw sandbox before this.

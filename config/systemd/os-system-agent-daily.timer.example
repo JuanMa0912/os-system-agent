@@ -1,0 +1,16 @@
+# OS_SYSTEM_AGENT — daily ETL report timer (systemd USER timer).
+# Pairs with os-system-agent-daily.service. Install steps are in that file.
+
+[Unit]
+Description=Run the OS_SYSTEM_AGENT daily ETL report
+
+[Timer]
+# Fire every day at 08:30 local time. Adjust to just after the ETL window.
+OnCalendar=*-*-* 08:30:00
+# If the machine was asleep/off at 08:30, run as soon as it is back.
+Persistent=true
+# Spread load / avoid a thundering herd — random 0..120s extra delay.
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

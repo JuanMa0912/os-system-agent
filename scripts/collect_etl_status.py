@@ -8,23 +8,22 @@ Two modes:
 * ``--live``: read real status over read-only SSH. For each job with a
   ``systemd_unit``, run ``systemctl show`` on the server (allowlist-enforced),
   parse the last-run result/timestamp, and classify freshness.
+
+Collection and rendering live in :mod:`os_system_agent.collector` so this CLI
+and the Telegram push (``send_daily_report.py``) share one implementation.
 """
 
 from __future__ import annotations
 
 import argparse
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime
 from pathlib import Path
 
-from os_system_agent.catalog import EtlJob, load_catalog
-from os_system_agent.monitors.freshness import JobStatus, evaluate_freshness
-from os_system_agent.monitors.systemd import evaluate_systemd, parse_state, show_command
-from os_system_agent.reports.daily import render_daily_report
-from os_system_agent.ssh_client import run_read_only
+from os_system_agent.catalog import load_catalog
+from os_system_agent.collector import build_daily_report, collect_statuses
 
 DEFAULT_CATALOG = Path("config/alert-rules.example.yml")
 DEFAULT_SERVER_ALIAS = "server232"
-MOCK_AGE_MINUTES = 30
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -36,39 +35,18 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def _collect_dry_run(jobs: list[EtlJob], now: datetime) -> list[JobStatus]:
-    mocked_latest = now - timedelta(minutes=MOCK_AGE_MINUTES)
-    return [evaluate_freshness(job, mocked_latest, now) for job in jobs]
-
-
-def _collect_live(jobs: list[EtlJob], alias: str, now: datetime) -> list[JobStatus]:
-    statuses: list[JobStatus] = []
-    for job in jobs:
-        if not job.systemd_unit:
-            continue
-        result = run_read_only(alias, show_command(job.systemd_unit))
-        state = parse_state(result.stdout, job.systemd_unit)
-        statuses.append(evaluate_systemd(job, state, now))
-    return statuses
-
-
 def main(argv: list[str] | None = None) -> int:
     args = _parse_args(argv)
     jobs = load_catalog(args.catalog)
     now = datetime.now(UTC)
 
-    if args.dry_run:
-        statuses = _collect_dry_run(jobs, now)
-    else:
-        statuses = _collect_live(jobs, args.server_alias, now)
-
-    server = jobs[0].server if jobs else args.server_alias
-    report = render_daily_report(
-        server=server,
-        report_date=date.fromisoformat(now.date().isoformat()),
-        statuses=statuses,
+    statuses = collect_statuses(
+        jobs,
+        live=not args.dry_run,
+        alias=args.server_alias,
+        now=now,
     )
-    print(report)
+    print(build_daily_report(jobs, statuses, now))
     return 0
 
 

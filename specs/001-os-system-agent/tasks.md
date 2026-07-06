@@ -124,6 +124,29 @@ Verification:
 - only allowlisted command executes
 - audit ledger captures result
 
+## T011 — Push the daily report to Telegram (M5)
+
+Risk: low
+Approval required: no (read-only monitoring + one outbound notification)
+
+Verification:
+
+- outbound `openclaw message send` delivers (verified: Message ID returned).
+- `send_daily_report.py` dry-run prints, delivers nothing.
+- `--send` delivers; refuses without a target (fail closed).
+- systemd user timer fires on schedule and the report arrives.
+
+**Status: CODE DONE — timer install pending on MMAUTOML01.**
+`os_system_agent.collector` now holds the shared collect+render pipeline (used by
+both `collect_etl_status.py` and the new `send_daily_report.py`).
+`send_daily_report.py` is dry-run/fail-closed by default: `--send` to deliver,
+`--target`/`OS_TELEGRAM_TARGET` required, `--only-incidents` for an alert-only
+timer. Systemd user units in `config/systemd/os-system-agent-daily.{service,
+timer}.example`. 16 new tests (collector + send). Outbound send verified by hand
+(Message ID 118). Remaining: copy the units on the box, fill paths +
+`OS_TELEGRAM_TARGET`, `enable --now`, and confirm a scheduled run arrives. See
+`docs/openclaw-phase1-runbook.md` §9.
+
 ## T010 — Run OpenClaw security audit
 
 Risk: low  

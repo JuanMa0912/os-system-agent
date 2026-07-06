@@ -1,0 +1,48 @@
+# OS_SYSTEM_AGENT — daily ETL report push (systemd USER service).
+#
+# Runs on the gateway host (MMAUTOML01) as the same user that runs the OpenClaw
+# gateway, so `openclaw message send` can reach the local gateway. It collects
+# live ETL status over read-only SSH and delivers the daily report to Telegram.
+#
+# Install (as the gateway user, NOT root):
+#   mkdir -p ~/.config/systemd/user
+#   cp config/systemd/os-system-agent-daily.service.example \
+#      ~/.config/systemd/user/os-system-agent-daily.service
+#   cp config/systemd/os-system-agent-daily.timer.example \
+#      ~/.config/systemd/user/os-system-agent-daily.timer
+#   # then edit the copies: fill in the paths + OS_TELEGRAM_TARGET (see below)
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now os-system-agent-daily.timer
+#   loginctl enable-linger "$USER"   # so the timer runs when you're not logged in
+#
+# Fill in these placeholders first (find the real values on the box):
+#   %h                     -> expands to the user's home automatically
+#   <UV_PATH>              -> `command -v uv`        e.g. %h/.local/bin/uv
+#   <OPENCLAW_PATH>        -> `command -v openclaw`  (its dir goes on PATH below)
+#   <TELEGRAM_CHAT_ID>     -> the operator chat id (kept out of git on purpose)
+
+[Unit]
+Description=OS_SYSTEM_AGENT daily ETL report to Telegram
+# Deliver only after the local gateway is up (user service).
+After=openclaw-gateway.service
+Wants=openclaw-gateway.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/os-system-agent
+
+# Minimal PATH for a user unit; append the dir that contains `openclaw`.
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# The recipient id is NOT committed — set it here on the box only.
+Environment=OS_TELEGRAM_TARGET=<TELEGRAM_CHAT_ID>
+# Optional: pin the openclaw binary explicitly if it is not on PATH above.
+#Environment=OPENCLAW_BIN=<OPENCLAW_PATH>
+
+# --live: real status over read-only SSH · --send: actually deliver.
+ExecStart=<UV_PATH> run python scripts/send_daily_report.py \
+    --live --send \
+    --channel telegram \
+    --catalog config/alert-rules.yml
+
+# Never hang the box: hard cap the whole run.
+TimeoutStartSec=180

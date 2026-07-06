@@ -57,10 +57,12 @@ select = ["E", "F", "I", "UP", "B", "S", "W"]
 "tests/**" = ["S101", "S105", "S106"]  # asserts and fake secrets are expected in tests
 # The SSH call is guarded by assert_read_only(); the subprocess is intentional.
 "src/os_system_agent/ssh_client.py" = ["S603", "S607"]
+# Invokes the fixed `openclaw` CLI (no shell) to deliver notifications.
+"scripts/send_daily_report.py" = ["S603", "S607"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
+pythonpath = ["src", "scripts"]
 addopts = "-q"
 
 [tool.mypy]
