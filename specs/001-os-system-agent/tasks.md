@@ -136,16 +136,16 @@ Verification:
 - `--send` delivers; refuses without a target (fail closed).
 - systemd user timer fires on schedule and the report arrives.
 
-**Status: CODE DONE — timer install pending on MMAUTOML01.**
-`os_system_agent.collector` now holds the shared collect+render pipeline (used by
-both `collect_etl_status.py` and the new `send_daily_report.py`).
+**Status: DONE.** `os_system_agent.collector` holds the shared collect+render
+pipeline (used by both `collect_etl_status.py` and `send_daily_report.py`).
 `send_daily_report.py` is dry-run/fail-closed by default: `--send` to deliver,
 `--target`/`OS_TELEGRAM_TARGET` required, `--only-incidents` for an alert-only
-timer. Systemd user units in `config/systemd/os-system-agent-daily.{service,
-timer}.example`. 16 new tests (collector + send). Outbound send verified by hand
-(Message ID 118). Remaining: copy the units on the box, fill paths +
-`OS_TELEGRAM_TARGET`, `enable --now`, and confirm a scheduled run arrives. See
-`docs/openclaw-phase1-runbook.md` §9.
+timer. 16 new tests (collector + send). **Live end-to-end verified on
+MMAUTOML01:** real `--live --send` run delivered the full 7-ETL daily report to
+Telegram, and the systemd **user** timer
+(`~/.config/systemd/user/os-system-agent-daily.{service,timer}`) fires daily at
+08:30 (`Type=oneshot`, exit 0/SUCCESS, ~13s, well under the 180s cap; linger on).
+Stays read-only — execution is Phase 2. See `docs/openclaw-phase1-runbook.md` §9.
 
 ## T010 — Run OpenClaw security audit
 
