@@ -48,9 +48,9 @@ def test_current_report_renders_from_runner(catalog: Path) -> None:
     report = mcp_server.current_report(
         catalog_path=catalog, alias="server232", now=NOW, runner=_runner
     )
-    assert "OS_SYSTEM_AGENT — Daily ETL Report" in report
+    assert "OS_SYSTEM_AGENT · ETL" in report
     assert "Test Job" in report
-    assert "Overall status: INFO" in report
+    assert "Estado: INFO" in report
 
 
 def test_estado_etl_tool_takes_no_arguments() -> None:

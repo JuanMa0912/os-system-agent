@@ -17,9 +17,15 @@ Install this on the gateway host at
 ## What to do
 
 When the operator asks about **ETL status, health, freshness, or "did the jobs
-run"**, call the **`estado_etl`** tool and return its output. That tool runs the
-fixed read-only collector and produces the current daily report; report it as-is
-(you may add a one-line summary on top, but do not invent numbers).
+run"**, call the **`estado_etl`** tool and return its output **verbatim**.
+
+The tool already returns a compact, chat-ready report (one line per job). To keep
+it readable and cheap:
+
+- **Do not** reformat it into a markdown table — Telegram does not render tables.
+- **Do not** re-list every job in prose or restate the numbers.
+- At most, add **one short summary line** on top (e.g. "Todo en verde" or "1 job
+  atrasado"); then paste the tool output as-is. Never invent numbers.
 
 The `/estado` slash command dispatches straight to this tool, bypassing you.
 

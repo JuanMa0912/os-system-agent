@@ -26,7 +26,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from os_system_agent.catalog import CatalogError, load_catalog
-from os_system_agent.collector import Runner, build_daily_report, collect_statuses
+from os_system_agent.collector import Runner, build_chat_report, collect_statuses
 from os_system_agent.reports.daily import overall_severity
 from os_system_agent.ssh_client import run_read_only
 
@@ -59,7 +59,7 @@ def current_report(
         file=sys.stderr,
         flush=True,
     )
-    return build_daily_report(jobs, statuses, when)
+    return build_chat_report(jobs, statuses, when)
 
 
 class _ReportCache:

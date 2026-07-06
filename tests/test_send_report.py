@@ -117,7 +117,7 @@ def test_main_send_delivers_report(catalog: Path) -> None:
     channel, target, message = recorder.calls[0]
     assert channel == "telegram"
     assert target == "123"
-    assert "Daily ETL Report" in message
+    assert "OS_SYSTEM_AGENT · ETL" in message
 
 
 def test_main_send_without_target_fails_closed(

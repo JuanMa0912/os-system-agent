@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 from os_system_agent.catalog import EtlJob
 from os_system_agent.monitors.freshness import JobStatus, evaluate_freshness
 from os_system_agent.monitors.systemd import evaluate_systemd, parse_state, show_command
-from os_system_agent.reports.daily import render_daily_report
+from os_system_agent.reports.daily import render_chat_report, render_daily_report
 from os_system_agent.ssh_client import CommandResult, run_read_only
 
 # In dry-run we pretend every job finished this long ago (well inside any
@@ -64,9 +64,19 @@ def collect_statuses(
 
 
 def build_daily_report(jobs: list[EtlJob], statuses: list[JobStatus], now: datetime) -> str:
-    """Render the human-readable daily report (evidence already redacted)."""
+    """Render the full §13 daily report (evidence already redacted)."""
     server = jobs[0].server if jobs else "unknown"
     return render_daily_report(
+        server=server,
+        report_date=now.date(),
+        statuses=statuses,
+    )
+
+
+def build_chat_report(jobs: list[EtlJob], statuses: list[JobStatus], now: datetime) -> str:
+    """Render the compact, chat-friendly report (for Telegram push + pull)."""
+    server = jobs[0].server if jobs else "unknown"
+    return render_chat_report(
         server=server,
         report_date=now.date(),
         statuses=statuses,

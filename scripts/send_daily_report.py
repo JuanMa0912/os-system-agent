@@ -32,7 +32,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from os_system_agent.catalog import load_catalog
-from os_system_agent.collector import build_daily_report, collect_statuses
+from os_system_agent.collector import build_chat_report, collect_statuses
 from os_system_agent.reports.daily import overall_severity
 from os_system_agent.severity import Severity
 
@@ -153,7 +153,7 @@ def main(argv: list[str] | None = None, *, sender: Sender | None = None) -> int:
     now = datetime.now(UTC)
 
     statuses = collect_statuses(jobs, live=args.live, alias=args.server_alias, now=now)
-    report = build_daily_report(jobs, statuses, now)
+    report = build_chat_report(jobs, statuses, now)
     worst = overall_severity(statuses)
 
     if not should_send(worst, only_incidents=args.only_incidents):

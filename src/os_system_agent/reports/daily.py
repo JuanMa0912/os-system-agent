@@ -109,6 +109,67 @@ def render_daily_report(
     return "\n".join(lines)
 
 
+# Short severity tags for the compact chat format (token-cheap, plain ASCII).
+_CHAT_TAG: dict[Severity, str] = {
+    Severity.INFO: "OK",
+    Severity.WARNING: "WARN",
+    Severity.CRITICAL: "CRIT",
+    Severity.SECURITY: "SEC",
+}
+
+
+def _humanize_minutes(minutes: float | None) -> str:
+    """Render a delay in minutes as a short human string (e.g. ``6h 53m``)."""
+    if minutes is None:
+        return "sin dato"
+    total = int(round(minutes))
+    if total < 60:
+        return f"{total}m"
+    hours, mins = divmod(total, 60)
+    if hours < 24:
+        return f"{hours}h {mins}m" if mins else f"{hours}h"
+    days, hrs = divmod(hours, 24)
+    return f"{days}d {hrs}h" if hrs else f"{days}d"
+
+
+def render_chat_report(
+    *,
+    server: str,
+    report_date: date,
+    statuses: Sequence[JobStatus],
+) -> str:
+    """Render a compact, chat-friendly report: one line per job, no filler.
+
+    Optimized for Telegram (no markdown tables — they don't render there) and for
+    token cost (the daily §13 report is verbose). Evidence still goes through
+    :func:`redact`.
+    """
+    worst = overall_severity(statuses)
+    incidents = [s for s in statuses if s.severity in (Severity.CRITICAL, Severity.SECURITY)]
+    warnings = [s for s in statuses if s.severity is Severity.WARNING]
+
+    lines = [
+        f"OS_SYSTEM_AGENT · ETL {report_date.isoformat()} · {redact(server)}",
+        f"Estado: {worst.value} · incidentes: {len(incidents)} · avisos: {len(warnings)}",
+        "",
+    ]
+    if not statuses:
+        lines.append("(sin jobs evaluados)")
+    for status in statuses:
+        tag = _CHAT_TAG.get(status.severity, "?")
+        when = status.latest_at.strftime("%m-%d %H:%M") if status.latest_at else "—"
+        age = _humanize_minutes(status.delay_minutes)
+        lines.append(f"{tag} · {redact(status.name)} — hace {age} ({when})")
+
+    detail = incidents + warnings
+    if detail:
+        lines.append("")
+        for status in detail:
+            lines.append(f"! {redact(status.name)}: {redact(status.evidence)}")
+
+    return "\n".join(lines)
+
+
 def render_incident_alert(*, server: str, status: JobStatus, trace_id: str) -> str:
     """Render a single incident alert (CLAUDE.md §13).
 

@@ -53,6 +53,11 @@ Approval required: yes (touches OpenClaw config)
 
 Verification: `openclaw mcp probe`, `openclaw skills check`.
 
+**Status: DONE.** MCP server `os-system-agent` added (`--include estado_etl`,
+stdio via the venv python, cwd=repo, env catalog+alias) — probes OK, `1 tools`.
+Skill `estado-etl` installed to the workspace, shows `ready`; `command-tool`
+= `estado_etl`.
+
 ## T205 — End-to-end + re-audit (box, guided)
 
 Risk: low
@@ -63,5 +68,23 @@ Approval required: no
 - Injection attempt → nothing but the tool runs.
 - `openclaw security audit --deep` → **0 critical**.
 
-Verification: screenshots/paste of the three interactions + audit summary.
-Update this file with completion notes and the memory file.
+**Status: DONE (validated on Telegram).** `/estado` + NL "¿cómo están los ETL?"
+both returned the report via the tool. Scope-lock held: refused two math
+questions, an integral question, and a "restart the sales ETL" request (stated
+read-only, did not execute). `security audit --deep` still **0 critical** (same 2
+accepted warns; adding the tool/skill introduced no new finding). Note: the weak
+model (gpt-oss) is contained precisely because the only tool it has is read-only
+and parameterless.
+
+## T206 — Compact chat report format (token + readability)
+
+Risk: low
+Approval required: no
+
+- `render_chat_report` (one line/job, humanized freshness, no `n/a`, no markdown
+  table — Telegram doesn't render those); used by the daily push and the pull
+  tool. Skill instructs the model to return it verbatim (no re-tabulation).
+
+**Status: CODE DONE.** 10 new tests. Box: `git pull`, reinstall skill
+(`--force`), `mcp reload` + gateway restart so the MCP server respawns with the
+new format.
