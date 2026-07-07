@@ -18,6 +18,7 @@ NOW = datetime(2026, 7, 6, 13, 0, 0, tzinfo=UTC)
 
 # systemctl show output for a job that succeeded ~3 minutes before NOW.
 CANNED_SHOW = (
+    "Id=test.service\n"
     "Result=success\n"
     "ExecMainStatus=0\n"
     "ExecMainExitTimestamp=Mon 2026-07-06 07:56:59 -05\n"  # 12:56:59 UTC
@@ -65,8 +66,52 @@ def test_collect_live_uses_injected_runner() -> None:
     assert status.severity is Severity.INFO
     assert status.delay_minutes is not None and 0 <= status.delay_minutes < 10
     assert "test.service" in status.evidence
-    assert calls == ["systemctl show test.service -p Result,ExecMainStatus,"
-                     "ExecMainExitTimestamp,ActiveState"]
+    assert calls == [
+        "systemctl show test.service -p Id,Result,ExecMainStatus,"
+        "ExecMainExitTimestamp,ActiveState"
+    ]
+
+
+def test_collect_live_batches_all_units_into_one_ssh_call() -> None:
+    calls: list[str] = []
+    multi_output = (
+        "Id=a.service\n"
+        "Result=success\n"
+        "ExecMainStatus=0\n"
+        "ExecMainExitTimestamp=Mon 2026-07-06 07:56:59 -05\n"
+        "ActiveState=inactive\n"
+        "\n"
+        "Id=b.service\n"
+        "Result=success\n"
+        "ExecMainStatus=0\n"
+        "ExecMainExitTimestamp=Mon 2026-07-06 12:50:00 -05\n"
+        "ActiveState=inactive\n"
+    )
+
+    def runner(alias: str, command: str) -> CommandResult:
+        calls.append(command)
+        return CommandResult(command=command, exit_code=0, stdout=multi_output, stderr="")
+
+    jobs = [_job("a", unit="a.service"), _job("b", unit="b.service")]
+    statuses = collect_live(jobs, "server232", NOW, runner=runner)
+
+    assert len(calls) == 1  # ONE SSH round-trip for both units
+    assert calls[0] == (
+        "systemctl show a.service b.service -p Id,Result,ExecMainStatus,"
+        "ExecMainExitTimestamp,ActiveState"
+    )
+    assert [s.severity for s in statuses] == [Severity.INFO, Severity.INFO]
+    assert "a.service" in statuses[0].evidence
+    assert "b.service" in statuses[1].evidence
+
+
+def test_collect_live_fails_closed_when_unit_missing_from_output() -> None:
+    def runner(alias: str, command: str) -> CommandResult:
+        return CommandResult(command=command, exit_code=0, stdout="Id=other.service\n", stderr="")
+
+    jobs = [_job("a", unit="test.service")]
+    statuses = collect_live(jobs, "server232", NOW, runner=runner)
+    assert statuses[0].severity is Severity.CRITICAL
 
 
 def test_collect_live_skips_jobs_without_a_unit() -> None:

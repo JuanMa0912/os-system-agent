@@ -12,7 +12,12 @@ from datetime import datetime, timedelta
 
 from os_system_agent.catalog import EtlJob
 from os_system_agent.monitors.freshness import JobStatus, evaluate_freshness
-from os_system_agent.monitors.systemd import evaluate_systemd, parse_state, show_command
+from os_system_agent.monitors.systemd import (
+    SystemdState,
+    evaluate_systemd,
+    parse_multi,
+    show_command_multi,
+)
 from os_system_agent.reports.daily import render_chat_report, render_daily_report
 from os_system_agent.ssh_client import CommandResult, run_read_only
 
@@ -38,13 +43,26 @@ def collect_live(
     *,
     runner: Runner = run_read_only,
 ) -> list[JobStatus]:
-    """Read real last-run status over read-only SSH for each systemd-backed job."""
+    """Read real last-run status over read-only SSH in ONE ``systemctl show`` call."""
+    pairs: list[tuple[EtlJob, str]] = [
+        (job, job.systemd_unit) for job in jobs if job.systemd_unit
+    ]
+    if not pairs:
+        return []
+
+    units = [unit for _, unit in pairs]
+    result = runner(alias, show_command_multi(units))
+    states = parse_multi(result.stdout)
+
     statuses: list[JobStatus] = []
-    for job in jobs:
-        if not job.systemd_unit:
-            continue
-        result = runner(alias, show_command(job.systemd_unit))
-        state = parse_state(result.stdout, job.systemd_unit)
+    for job, unit in pairs:
+        state = states.get(unit) or SystemdState(
+            unit=unit,
+            result="unknown",  # unit not in output -> fail closed (CRITICAL)
+            exit_status=None,
+            last_exit_at=None,
+            active_state=None,
+        )
         statuses.append(evaluate_systemd(job, state, now))
     return statuses
 

@@ -9,6 +9,7 @@ This module builds that command, parses its output, and turns it into a
 from __future__ import annotations
 
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -22,9 +23,24 @@ from os_system_agent.severity import Severity, classify_freshness
 _DT_RE = re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*([+-]\d{2}(?::?\d{2})?)?")
 
 
+# Properties read per unit. ``Id`` is included in the multi form so each block
+# can be keyed back to its unit regardless of ordering.
+_PROPS = "Result,ExecMainStatus,ExecMainExitTimestamp,ActiveState"
+_PROPS_MULTI = f"Id,{_PROPS}"
+
+
 def show_command(unit: str) -> str:
-    """Return the read-only ``systemctl show`` command for ``unit``."""
-    return f"systemctl show {unit} -p Result,ExecMainStatus,ExecMainExitTimestamp,ActiveState"
+    """Return the read-only ``systemctl show`` command for a single ``unit``."""
+    return f"systemctl show {unit} -p {_PROPS}"
+
+
+def show_command_multi(units: Sequence[str]) -> str:
+    """Return ONE read-only ``systemctl show`` command for many units.
+
+    ``systemctl show`` accepts multiple units and prints one blank-line-separated
+    block each; ``Id`` keys every block. This collapses N SSH round-trips to 1.
+    """
+    return f"systemctl show {' '.join(units)} -p {_PROPS_MULTI}"
 
 
 @dataclass(frozen=True)
@@ -55,14 +71,18 @@ def _parse_timestamp(value: str) -> datetime | None:
         return None
 
 
-def parse_state(text: str, unit: str) -> SystemdState:
-    """Parse ``key=value`` output of ``systemctl show`` into a :class:`SystemdState`."""
+def _kv_from_block(text: str) -> dict[str, str]:
+    """Parse ``key=value`` lines of one ``systemctl show`` block."""
     kv: dict[str, str] = {}
     for line in text.splitlines():
         if "=" in line:
             key, _, val = line.partition("=")
             kv[key.strip()] = val.strip()
+    return kv
 
+
+def _state_from_kv(kv: dict[str, str], unit: str) -> SystemdState:
+    """Build a :class:`SystemdState` from parsed ``key=value`` properties."""
     exit_raw = kv.get("ExecMainStatus", "").strip()
     try:
         exit_status: int | None = int(exit_raw) if exit_raw else None
@@ -76,6 +96,27 @@ def parse_state(text: str, unit: str) -> SystemdState:
         last_exit_at=_parse_timestamp(kv.get("ExecMainExitTimestamp", "")),
         active_state=kv.get("ActiveState") or None,
     )
+
+
+def parse_state(text: str, unit: str) -> SystemdState:
+    """Parse single-unit ``systemctl show`` output into a :class:`SystemdState`."""
+    return _state_from_kv(_kv_from_block(text), unit)
+
+
+def parse_multi(text: str) -> dict[str, SystemdState]:
+    """Parse multi-unit ``systemctl show`` output into ``{unit_id: SystemdState}``.
+
+    Blocks are separated by a blank line and each is keyed by its ``Id``.
+    """
+    states: dict[str, SystemdState] = {}
+    for block in re.split(r"\n[ \t]*\n", text.strip()):
+        if not block.strip():
+            continue
+        kv = _kv_from_block(block)
+        unit = kv.get("Id") or ""
+        if unit:
+            states[unit] = _state_from_kv(kv, unit)
+    return states
 
 
 def evaluate_systemd(job: EtlJob, state: SystemdState, now: datetime) -> JobStatus:

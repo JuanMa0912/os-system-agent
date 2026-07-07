@@ -15,6 +15,7 @@ from os_system_agent.ssh_client import CommandResult
 NOW = datetime(2026, 7, 6, 13, 0, 0, tzinfo=UTC)
 
 CANNED_SHOW = (
+    "Id=test.service\n"
     "Result=success\n"
     "ExecMainStatus=0\n"
     "ExecMainExitTimestamp=Mon 2026-07-06 07:56:59 -05\n"
