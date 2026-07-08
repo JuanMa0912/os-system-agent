@@ -5,9 +5,11 @@
 Description=Run the OS_SYSTEM_AGENT daily ETL report
 
 [Timer]
-# Fire every day at 08:30 local time. Adjust to just after the ETL window.
+# Two digests a day: morning (just after the ETL window) and evening.
+# Multiple OnCalendar lines are OR'd — the report fires at each time.
 OnCalendar=*-*-* 08:30:00
-# If the machine was asleep/off at 08:30, run as soon as it is back.
+OnCalendar=*-*-* 18:00:00
+# If the machine was asleep/off at a fire time, run as soon as it is back.
 Persistent=true
 # Spread load / avoid a thundering herd — random 0..120s extra delay.
 RandomizedDelaySec=120
