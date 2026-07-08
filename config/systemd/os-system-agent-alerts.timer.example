@@ -1,0 +1,16 @@
+# OS_SYSTEM_AGENT — proactive ETL alerts timer (systemd USER timer).
+# Pairs with os-system-agent-alerts.service. Install steps are in that file.
+
+[Unit]
+Description=Run the OS_SYSTEM_AGENT proactive ETL incident check
+
+[Timer]
+# Every 2 hours at :15 (offset from the :00 daily/ETL windows). Tune as needed;
+# hourly is fine too (*-*-* *:15:00). Alerts fire only on change, so a tighter
+# cadence just detects breakage sooner — it does not spam.
+OnCalendar=*-*-* 0/2:15:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

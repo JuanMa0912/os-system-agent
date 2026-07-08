@@ -180,9 +180,40 @@ never hangs the box. It stays **read-only** — it reads status and sends a
 message; it never touches the ETL server's state. Approval-gated execution is
 Phase 2.
 
+## 10. Proactive incident alerts (spec 003)
+
+The daily push is a digest; this is the "something broke" signal. A second, more
+frequent timer runs `scripts/alert_incidents.py`, which live-checks status and
+sends a Telegram alert **only when the incident set changes** — a new/escalated
+incident, a recovery, or the server going unreachable — and stays silent
+otherwise (no alert fatigue). It is **deterministic** (no model), so it cannot
+run away.
+
+```bash
+# dry-run once (prints "no change" when healthy, or the alert text if not)
+python scripts/alert_incidents.py --catalog config/alert-rules.yml
+
+# what the timer runs (state in .alert-state.json, gitignored)
+python scripts/alert_incidents.py --send --channel telegram \
+    --target <chat_id> --catalog config/alert-rules.yml
+```
+
+Install `config/systemd/os-system-agent-alerts.{service,timer}.example` as USER
+units (same pattern as the daily push; timer ~every 2h). It reuses the
+`etl_monitor` read-only SSH path and one batched `systemctl show`.
+
+## Note — interactive pull (`/estado`) is parked
+
+The read-only `estado_etl` MCP tool works, but making it **conversational
+through the free model** proved unreliable (`command-dispatch` can't reach MCP
+tools; `gpt-oss` times out / refuses / asks for params / can run away). See
+`specs/002-estado-etl-pull/tasks.md`. A reliable `/estado` needs a deterministic
+OpenClaw **plugin** (no model) or a **paid model**. Parked; the push + alerts
+cover Phase 1 monitoring.
+
 ## Next
 
-- **Pull (read-only)** — a single narrow `estado_etl` tool/skill so the operator
-  can ask "how are the ETLs?" over Telegram, without re-opening execution.
+- **Deterministic `/estado` plugin** — the interactive pull, done without the
+  model (`registerCommand()`), so it is instant and cannot run away.
 - **Phase 2** — approval-gated ETL reruns (`APPROVE` format + dry-run + audit
   ledger). Re-enable the OpenClaw sandbox before this.

@@ -1,0 +1,35 @@
+# OS_SYSTEM_AGENT — proactive ETL incident alerts (systemd USER service).
+#
+# Runs more often than the daily digest (see the paired .timer) and sends a
+# Telegram alert ONLY when the incident set changes: a new/escalated incident, a
+# recovery, or the ETL server going unreachable. Silent otherwise (no fatigue).
+# State lives in `.alert-state.json` in the repo (gitignored).
+#
+# Install (as the gateway user): copy both files to ~/.config/systemd/user/,
+# fill in the paths + OS_TELEGRAM_TARGET, then:
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now os-system-agent-alerts.timer
+#
+# Placeholders: <VENV_PYTHON> = <repo>/.venv/bin/python · <OPENCLAW_PATH> dir on
+# PATH · <TELEGRAM_CHAT_ID> = operator id (kept out of git).
+
+[Unit]
+Description=OS_SYSTEM_AGENT proactive ETL incident alerts
+After=openclaw-gateway.service
+Wants=openclaw-gateway.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/os-system-agent
+
+Environment=PATH=%h/.local/bin:%h/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+Environment=OPENCLAW_BIN=<OPENCLAW_PATH>
+Environment=OS_TELEGRAM_TARGET=<TELEGRAM_CHAT_ID>
+
+# Runs the venv python directly (fast, deterministic; no model involved).
+ExecStart=<VENV_PYTHON> scripts/alert_incidents.py \
+    --send \
+    --channel telegram \
+    --catalog config/alert-rules.yml
+
+TimeoutStartSec=120

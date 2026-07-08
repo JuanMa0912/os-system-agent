@@ -110,7 +110,7 @@ def render_daily_report(
 
 
 # Short severity tags for the compact chat format (token-cheap, plain ASCII).
-_CHAT_TAG: dict[Severity, str] = {
+CHAT_TAG: dict[Severity, str] = {
     Severity.INFO: "OK",
     Severity.WARNING: "WARN",
     Severity.CRITICAL: "CRIT",
@@ -156,7 +156,7 @@ def render_chat_report(
     if not statuses:
         lines.append("(sin jobs evaluados)")
     for status in statuses:
-        tag = _CHAT_TAG.get(status.severity, "?")
+        tag = CHAT_TAG.get(status.severity, "?")
         when = status.latest_at.strftime("%m-%d %H:%M") if status.latest_at else "—"
         age = _humanize_minutes(status.delay_minutes)
         lines.append(f"{tag} · {redact(status.name)} — hace {age} ({when})")
