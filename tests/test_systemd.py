@@ -27,6 +27,13 @@ SHOW_FAIL = (
     "ActiveState=failed\n"
 )
 SHOW_NEVER = "Result=success\nExecMainStatus=0\nExecMainExitTimestamp=\nActiveState=inactive\n"
+# A unit with SuccessExitStatus=3: exit 3 is success, so Result stays "success".
+SHOW_OK_EXIT3 = (
+    "Result=success\n"
+    "ExecMainStatus=3\n"
+    "ExecMainExitTimestamp=Mon 2026-07-06 07:56:59 -05\n"
+    "ActiveState=inactive\n"
+)
 
 
 def test_show_command_passes_the_read_only_allowlist():
@@ -57,6 +64,14 @@ def test_success_but_stale_is_critical():
     state = parse_state(SHOW_OK, "etl-rotacion.service")
     now = state.last_exit_at + timedelta(minutes=1600)  # missed a day
     assert evaluate_systemd(DAILY, state, now).severity is Severity.CRITICAL
+
+
+def test_success_result_with_nonzero_exit_is_info():
+    # systemd's Result is the success authority (unit may set SuccessExitStatus).
+    state = parse_state(SHOW_OK_EXIT3, "visor-etl-sync.service")
+    assert state.exit_status == 3
+    now = state.last_exit_at + timedelta(minutes=30)
+    assert evaluate_systemd(DAILY, state, now).severity is Severity.INFO
 
 
 def test_failed_result_is_critical():

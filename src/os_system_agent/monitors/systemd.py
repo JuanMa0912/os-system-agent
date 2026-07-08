@@ -122,11 +122,13 @@ def parse_multi(text: str) -> dict[str, SystemdState]:
 def evaluate_systemd(job: EtlJob, state: SystemdState, now: datetime) -> JobStatus:
     """Turn a :class:`SystemdState` into a :class:`JobStatus` (fails closed).
 
-    A non-``success`` result or non-zero exit is CRITICAL regardless of timing.
-    Otherwise severity comes from how long ago the last successful run finished,
-    using the job's freshness thresholds (set to the job's cadence).
+    systemd's ``Result`` is the success authority: a unit may legitimately set
+    ``SuccessExitStatus`` so a non-zero ``ExecMainStatus`` still yields
+    ``Result=success``. So a non-``success`` result is CRITICAL regardless of
+    timing; ``ExecMainStatus`` is kept only as evidence. Otherwise severity comes
+    from how long ago the last successful run finished (freshness thresholds).
     """
-    if state.result != "success" or (state.exit_status not in (0, None)):
+    if state.result != "success":
         return JobStatus(
             job_id=job.id,
             name=job.name,
