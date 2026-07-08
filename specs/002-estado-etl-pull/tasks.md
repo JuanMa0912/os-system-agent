@@ -89,3 +89,24 @@ Approval required: no
 **Status: CODE DONE.** 10 new tests. Box: `git pull`, reinstall skill
 (`--force`), `mcp reload` + gateway restart so the MCP server respawns with the
 new format.
+
+## Outcome / decision (2026-07-06)
+
+The read-only tool itself works, but the **interactive pull via the model is
+parked** as unreliable with the free-tier model:
+
+- OpenClaw's `command-dispatch: tool` **cannot resolve MCP tools** in 2026.6.11
+  (both bare `estado_etl` and `osagent__estado_etl` → "Tool not available"), so
+  `/estado` falls through to the model.
+- The free model (`gpt-oss`) is not dependable for this: 120b **times out**, 20b
+  **refuses** its own `/estado`, both **ask for parameters** instead of calling
+  the no-arg tool, and one run went into **runaway consumption** (OWASP LLM10).
+- Collection was optimized to a **single batched `systemctl show`** (~3s vs ~13s)
+  — necessary, but not sufficient.
+
+**Decision:** keep the daily **push** (model-free, deterministic — the real
+deliverable) and **disable the pull** for a zero-risk stable state
+(`openclaw mcp unset osagent` + remove the `estado` skill). A reliable
+interactive `/estado` needs either a **deterministic OpenClaw plugin**
+(`registerCommand()`, no model) or a **paid model** for natural language — both
+are future work.
