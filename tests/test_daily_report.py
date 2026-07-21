@@ -51,6 +51,16 @@ def test_daily_report_redacts_secret_in_evidence():
     assert "s3cr3tPWD" not in report
 
 
+def test_daily_report_shows_empresa():
+    report = render_daily_report(
+        empresa="Mercamio",
+        server="server232",
+        report_date=REPORT_DATE,
+        statuses=[_status(Severity.INFO)],
+    )
+    assert "Empresa: Mercamio" in report
+
+
 def test_overall_severity_picks_worst():
     statuses = [_status(Severity.INFO), _status(Severity.WARNING), _status(Severity.CRITICAL)]
     assert overall_severity(statuses) is Severity.CRITICAL

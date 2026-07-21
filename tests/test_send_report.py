@@ -11,6 +11,7 @@ import send_daily_report as sdr
 from os_system_agent.severity import Severity
 
 MINIMAL_CATALOG = """\
+empresa: TestCo
 jobs:
   - id: test-job
     name: Test Job

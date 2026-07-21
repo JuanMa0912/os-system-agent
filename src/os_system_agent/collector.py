@@ -84,7 +84,9 @@ def collect_statuses(
 def build_daily_report(jobs: list[EtlJob], statuses: list[JobStatus], now: datetime) -> str:
     """Render the full §13 daily report (evidence already redacted)."""
     server = jobs[0].server if jobs else "unknown"
+    empresa = jobs[0].empresa if jobs else "unknown"
     return render_daily_report(
+        empresa=empresa,
         server=server,
         report_date=now.date(),
         statuses=statuses,
@@ -94,7 +96,9 @@ def build_daily_report(jobs: list[EtlJob], statuses: list[JobStatus], now: datet
 def build_chat_report(jobs: list[EtlJob], statuses: list[JobStatus], now: datetime) -> str:
     """Render the compact, chat-friendly report (for Telegram push + pull)."""
     server = jobs[0].server if jobs else "unknown"
+    empresa = jobs[0].empresa if jobs else "unknown"
     return render_chat_report(
+        empresa=empresa,
         server=server,
         report_date=now.date(),
         statuses=statuses,

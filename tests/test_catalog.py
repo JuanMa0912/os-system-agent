@@ -15,6 +15,7 @@ def test_example_catalog_loads_with_expected_fields():
     assert isinstance(job, EtlJob)
     assert job.id == "daily_sales"
     assert job.name == "Daily Sales Load"
+    assert job.empresa == "NombreEmpresa"
     assert job.server == "server232"
     assert job.systemd_unit == "daily_sales.service"
     assert job.expected_finish_before == "08:00"
@@ -30,9 +31,48 @@ def test_missing_file_fails_closed(tmp_path):
         load_catalog(tmp_path / "does_not_exist.yml")
 
 
+def test_missing_empresa_fails_closed(tmp_path):
+    # A well-formed jobs list but no top-level `empresa` must fail closed:
+    # an unlabeled report could be attributed to the wrong company.
+    bad = tmp_path / "noempresa.yml"
+    bad.write_text(
+        "jobs:\n"
+        "  - id: j1\n"
+        "    server: server232\n"
+        "    freshness:\n"
+        "      max_delay_minutes_warning: 60\n"
+        "      max_delay_minutes_critical: 120\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(CatalogError):
+        load_catalog(bad)
+
+
+def test_empresa_is_applied_to_every_job(tmp_path):
+    ok = tmp_path / "ok.yml"
+    ok.write_text(
+        "empresa: Mercamio\n"
+        "jobs:\n"
+        "  - id: j1\n"
+        "    server: server232\n"
+        "    freshness:\n"
+        "      max_delay_minutes_warning: 60\n"
+        "      max_delay_minutes_critical: 120\n"
+        "  - id: j2\n"
+        "    server: server232\n"
+        "    freshness:\n"
+        "      max_delay_minutes_warning: 60\n"
+        "      max_delay_minutes_critical: 120\n",
+        encoding="utf-8",
+    )
+    jobs = load_catalog(ok)
+    assert {j.empresa for j in jobs} == {"Mercamio"}
+
+
 def test_warning_greater_than_critical_fails_closed(tmp_path):
     bad = tmp_path / "bad.yml"
     bad.write_text(
+        "empresa: TestCo\n"
         "jobs:\n"
         "  - id: j1\n"
         "    server: server232\n"
@@ -62,6 +102,7 @@ def test_empty_jobs_list_fails_closed(tmp_path):
 def test_missing_id_fails_closed(tmp_path):
     bad = tmp_path / "noid.yml"
     bad.write_text(
+        "empresa: TestCo\n"
         "jobs:\n"
         "  - server: server232\n"
         "    freshness:\n"
@@ -76,6 +117,7 @@ def test_missing_id_fails_closed(tmp_path):
 def test_missing_server_fails_closed(tmp_path):
     bad = tmp_path / "noserver.yml"
     bad.write_text(
+        "empresa: TestCo\n"
         "jobs:\n"
         "  - id: j1\n"
         "    freshness:\n"
@@ -90,6 +132,7 @@ def test_missing_server_fails_closed(tmp_path):
 def test_non_numeric_threshold_fails_closed(tmp_path):
     bad = tmp_path / "nonnum.yml"
     bad.write_text(
+        "empresa: TestCo\n"
         "jobs:\n"
         "  - id: j1\n"
         "    server: server232\n"
@@ -105,6 +148,7 @@ def test_non_numeric_threshold_fails_closed(tmp_path):
 def test_duplicate_ids_fail_closed(tmp_path):
     bad = tmp_path / "dupe.yml"
     bad.write_text(
+        "empresa: TestCo\n"
         "jobs:\n"
         "  - id: j1\n"
         "    server: server232\n"

@@ -7,8 +7,13 @@ execution lands in a later phase behind the approval parser.
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 from dataclasses import dataclass
+
+# Aliases that mean "run here, not over SSH" — used by the co-located deployment
+# (spec 004: one agent per empresa, running ON that empresa's ETL server).
+LOCAL_ALIASES: frozenset[str] = frozenset({"local", "localhost"})
 
 # Commands whose first token is allowed for autonomous read-only checks.
 READ_ONLY_ALLOWLIST: frozenset[str] = frozenset(
@@ -119,13 +124,44 @@ class CommandResult:
     stderr: str
 
 
+def run_read_only_local(command: str, *, timeout: float = 15.0) -> CommandResult:
+    """Run an allowlisted read-only ``command`` **locally** (no SSH).
+
+    For the co-located deployment the agent runs on the ETL server itself, so
+    monitoring needs no SSH-to-self. Fails closed: :func:`assert_read_only` runs
+    before execution, and the command is split with :func:`shlex.split` and run
+    without a shell, so no shell metacharacter can chain a second command.
+    """
+    assert_read_only(command)
+    proc = subprocess.run(
+        shlex.split(command),
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    return CommandResult(
+        command=command,
+        exit_code=proc.returncode,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
+    )
+
+
 def run_read_only(alias: str, command: str, *, timeout: float = 15.0) -> CommandResult:
     """Run an allowlisted read-only ``command`` on the SSH ``alias``.
+
+    If ``alias`` is a local alias (``local``/``localhost``) the command runs
+    here instead of over SSH — see :func:`run_read_only_local`. Otherwise it is
+    dispatched over SSH.
 
     Fails closed: :func:`assert_read_only` is enforced *before* any connection
     is attempted, so a non-allowlisted command never reaches the server.
     ``BatchMode=yes`` disables interactive prompts (no password/passphrase).
     """
+    if alias.lower() in LOCAL_ALIASES:
+        return run_read_only_local(command, timeout=timeout)
+
     assert_read_only(command)
     ssh_cmd = ["ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10", alias, command]
     proc = subprocess.run(

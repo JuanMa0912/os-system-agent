@@ -3,6 +3,11 @@
 # Phase 1 monitors systemd services, so each job names its `systemd_unit`; the
 # freshness thresholds are in MINUTES and should match the job's cadence
 # (a daily job is only "late" after ~a day, not after an hour).
+#
+# A catalog belongs to exactly ONE empresa (spec 004: one agent per empresa).
+# `empresa` is REQUIRED and labels every report/alert as "Reporte empresa <X>".
+
+empresa: NombreEmpresa
 
 jobs:
   - id: daily_sales

@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 
 from os_system_agent.catalog import EtlJob, FreshnessRule
 from os_system_agent.collector import (
+    build_chat_report,
     build_daily_report,
     collect_dry_run,
     collect_live,
@@ -26,13 +27,14 @@ CANNED_SHOW = (
 )
 
 
-def _job(job_id: str = "j", unit: str | None = None) -> EtlJob:
+def _job(job_id: str = "j", unit: str | None = None, empresa: str = "unknown") -> EtlJob:
     return EtlJob(
         id=job_id,
         name=f"Job {job_id}",
         server="testserver",
         schedule="daily",
         freshness=FreshnessRule(warning_after_minutes=1500, critical_after_minutes=1560),
+        empresa=empresa,
         systemd_unit=unit,
     )
 
@@ -128,3 +130,12 @@ def test_build_daily_report_contains_header_and_server() -> None:
     assert "OS_SYSTEM_AGENT — Daily ETL Report" in report
     assert "Server: testserver" in report
     assert "2026-07-06" in report
+
+
+def test_build_reports_label_empresa_from_catalog() -> None:
+    # empresa on the job (set by load_catalog from the catalog's top-level field)
+    # must reach both rendered reports.
+    jobs = [_job("a", empresa="Mercamio")]
+    statuses = collect_dry_run(jobs, NOW)
+    assert "Empresa: Mercamio" in build_daily_report(jobs, statuses, NOW)
+    assert "Reporte empresa Mercamio" in build_chat_report(jobs, statuses, NOW)

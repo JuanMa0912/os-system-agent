@@ -46,11 +46,13 @@ def render_daily_report(
     server: str,
     report_date: date,
     statuses: Sequence[JobStatus],
+    empresa: str = "unknown",
 ) -> str:
     """Render the daily ETL report (CLAUDE.md §13)."""
     lines: list[str] = [
         "OS_SYSTEM_AGENT — Daily ETL Report",
         "",
+        f"Empresa: {redact(empresa)}",
         f"Date: {report_date.isoformat()}",
         f"Server: {redact(server)}",
         f"Overall status: {overall_severity(statuses).value}",
@@ -137,18 +139,21 @@ def render_chat_report(
     server: str,
     report_date: date,
     statuses: Sequence[JobStatus],
+    empresa: str = "unknown",
 ) -> str:
     """Render a compact, chat-friendly report: one line per job, no filler.
 
     Optimized for Telegram (no markdown tables — they don't render there) and for
     token cost (the daily §13 report is verbose). Evidence still goes through
-    :func:`redact`.
+    :func:`redact`. The header leads with ``Reporte empresa <X>`` so the operator
+    can tell which company a message is about at a glance.
     """
     worst = overall_severity(statuses)
     incidents = [s for s in statuses if s.severity in (Severity.CRITICAL, Severity.SECURITY)]
     warnings = [s for s in statuses if s.severity is Severity.WARNING]
 
     lines = [
+        f"Reporte empresa {redact(empresa)}",
         f"OS_SYSTEM_AGENT · ETL {report_date.isoformat()} · {redact(server)}",
         f"Estado: {worst.value} · incidentes: {len(incidents)} · avisos: {len(warnings)}",
         "",

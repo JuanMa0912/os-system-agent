@@ -32,8 +32,8 @@ class _Recorder:
 
 
 def _fixed_incidents(*statuses: JobStatus):
-    def _fn(catalog: Path, alias: str, now: object) -> tuple[list[JobStatus], str]:
-        return list(statuses), "server232"
+    def _fn(catalog: Path, alias: str, now: object) -> tuple[list[JobStatus], str, str]:
+        return list(statuses), "server232", "Mercamio"
 
     return _fn
 
@@ -54,6 +54,7 @@ def test_sends_on_new_incident_then_silent(monkeypatch: pytest.MonkeyPatch, tmp_
     assert rc == 0
     assert len(rec.calls) == 1
     assert "Job ventas" in rec.calls[0][2]
+    assert "empresa Mercamio" in rec.calls[0][2]  # alert names the company
     assert json.loads(state.read_text(encoding="utf-8")) == {"ventas": "CRITICAL"}
 
     # Same incident on the next run -> no second alert (no fatigue).

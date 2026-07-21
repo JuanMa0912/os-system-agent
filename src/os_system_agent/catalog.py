@@ -35,6 +35,11 @@ class EtlJob:
     server: str
     schedule: str
     freshness: FreshnessRule
+    # Company this job belongs to. A catalog is single-empresa, so this is
+    # denormalized from the catalog's top-level ``empresa`` by ``load_catalog``.
+    # The default only serves direct construction (tests/tools); the loader
+    # always sets it explicitly and fails closed if the catalog omits it.
+    empresa: str = "unknown"
     systemd_unit: str | None = None
     expected_finish_before: str | None = None
     log_path: str | None = None
@@ -49,7 +54,7 @@ def _require_number(value: Any, *, job_id: str, field: str) -> float:
     return float(value)
 
 
-def _parse_job(raw: Any, *, index: int) -> EtlJob:
+def _parse_job(raw: Any, *, index: int, empresa: str) -> EtlJob:
     """Validate and build one :class:`EtlJob` from a raw mapping."""
     if not isinstance(raw, dict):
         raise CatalogError(f"jobs[{index}] must be a mapping, got {type(raw).__name__}")
@@ -94,6 +99,7 @@ def _parse_job(raw: Any, *, index: int) -> EtlJob:
         name=str(raw.get("name") or job_id),
         server=server,
         schedule=str(raw.get("schedule") or "unspecified"),
+        empresa=empresa,
         freshness=FreshnessRule(
             warning_after_minutes=warning,
             critical_after_minutes=critical,
@@ -114,8 +120,9 @@ def load_catalog(path: Path) -> list[EtlJob]:
     """Load and validate the ETL job catalog from ``path``.
 
     Fails closed on: missing file, invalid YAML, no top-level ``jobs`` list,
-    an empty jobs list, jobs missing ``id``/``server``, non-numeric freshness
-    thresholds, warning>critical, or duplicate ids.
+    an empty jobs list, a missing top-level ``empresa``, jobs missing
+    ``id``/``server``, non-numeric freshness thresholds, warning>critical, or
+    duplicate ids.
     """
     path = Path(path)
     if not path.is_file():
@@ -134,10 +141,16 @@ def load_catalog(path: Path) -> list[EtlJob]:
     if not isinstance(jobs_raw, list) or not jobs_raw:
         raise CatalogError(f"catalog {path} has an empty or invalid 'jobs' list")
 
+    # Every catalog belongs to exactly one empresa; the report/alert label depends
+    # on it, so a missing empresa is a fail-closed error (never an unlabeled report).
+    empresa = data.get("empresa")
+    if not empresa or not isinstance(empresa, str):
+        raise CatalogError(f"catalog {path} must set a top-level non-empty 'empresa'")
+
     jobs: list[EtlJob] = []
     seen_ids: set[str] = set()
     for index, raw in enumerate(jobs_raw):
-        job = _parse_job(raw, index=index)
+        job = _parse_job(raw, index=index, empresa=empresa)
         if job.id in seen_ids:
             raise CatalogError(f"duplicate job id in catalog: {job.id!r}")
         seen_ids.add(job.id)

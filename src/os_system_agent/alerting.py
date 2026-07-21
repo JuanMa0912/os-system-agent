@@ -82,14 +82,20 @@ def render_alert(
     to_alert: list[JobStatus],
     recovered: list[str],
     names: dict[str, str] | None = None,
+    empresa: str = "unknown",
 ) -> str:
     """Render a compact alert message for changed incidents and recoveries.
 
     ``names`` optionally maps a recovered ``job_id`` to a human name; ids fall
-    back to themselves when unmapped.
+    back to themselves when unmapped. The header names the ``empresa`` so a
+    CRITICAL landing in a shared Telegram group is unambiguous about which
+    company it is about.
     """
     names = names or {}
-    lines = [f"⚠️ OS_SYSTEM_AGENT — cambios ETL {report_date.isoformat()} · {redact(server)}"]
+    lines = [
+        f"⚠️ OS_SYSTEM_AGENT · empresa {redact(empresa)} — "
+        f"cambios ETL {report_date.isoformat()} · {redact(server)}"
+    ]
 
     if to_alert:
         lines.append("")

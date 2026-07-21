@@ -23,6 +23,7 @@ CANNED_SHOW = (
 )
 
 CATALOG = """\
+empresa: TestCo
 jobs:
   - id: test-job
     name: Test Job

@@ -96,3 +96,16 @@ def test_render_alert_recovered_falls_back_to_id() -> None:
         server="s", report_date=TODAY, to_alert=[], recovered=["some-job"], names=None
     )
     assert "OK · some-job" in message
+
+
+def test_render_alert_names_empresa_in_header() -> None:
+    message = render_alert(
+        server="server232",
+        report_date=TODAY,
+        to_alert=[_status("ventas", Severity.CRITICAL)],
+        recovered=[],
+        empresa="Mercamio",
+    )
+    # The empresa is named in the header, and the existing header shape is kept.
+    assert "empresa Mercamio" in message
+    assert "cambios ETL 2026-07-06 · server232" in message

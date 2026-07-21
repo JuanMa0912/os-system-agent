@@ -65,14 +65,17 @@ def _save_state(path: Path, state: dict[str, str]) -> None:
     path.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
 
 
-def _current_incidents(catalog: Path, alias: str, now: datetime) -> tuple[list[JobStatus], str]:
-    """Return (incident statuses, server) — a single server-down incident if unreachable."""
+def _current_incidents(
+    catalog: Path, alias: str, now: datetime
+) -> tuple[list[JobStatus], str, str]:
+    """Return (incident statuses, server, empresa); a server-down incident if unreachable."""
     jobs = load_catalog(catalog)
     server = jobs[0].server if jobs else alias
+    empresa = jobs[0].empresa if jobs else "unknown"
     if not _server_reachable(alias):
-        return [server_down_status(server)], server
+        return [server_down_status(server)], server, empresa
     statuses = collect_statuses(jobs, live=True, alias=alias, now=now)
-    return incident_statuses(statuses), server
+    return incident_statuses(statuses), server, empresa
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
@@ -91,7 +94,7 @@ def main(argv: list[str] | None = None, *, sender: Sender | None = None) -> int:
     args = _parse_args(argv)
     now = datetime.now(UTC)
 
-    incidents, server = _current_incidents(args.catalog, args.server_alias, now)
+    incidents, server, empresa = _current_incidents(args.catalog, args.server_alias, now)
     previous = _load_state(args.state_file)
     outcome = diff_incidents(previous, incidents)
 
@@ -110,6 +113,7 @@ def main(argv: list[str] | None = None, *, sender: Sender | None = None) -> int:
         to_alert=outcome.to_alert,
         recovered=outcome.recovered,
         names=names,
+        empresa=empresa,
     )
 
     if not args.send:

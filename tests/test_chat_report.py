@@ -55,6 +55,18 @@ def test_chat_report_one_line_per_job_and_no_table() -> None:
     assert "|" not in report  # never a markdown table
 
 
+def test_chat_report_leads_with_empresa() -> None:
+    statuses = [_status("Ventas diaria", Severity.INFO, 465)]
+    report = render_chat_report(
+        empresa="Mercamio", server="server232", report_date=WHEN.date(), statuses=statuses
+    )
+    # The empresa label is the first line so the operator can tell, at a glance in
+    # a shared Telegram group, which company a message is about.
+    assert report.startswith("Reporte empresa Mercamio")
+    # The existing machine-ish header line is preserved right below it.
+    assert "OS_SYSTEM_AGENT · ETL 2026-07-06 · server232" in report
+
+
 def test_chat_report_lists_incidents_and_counts() -> None:
     statuses = [
         _status("Ventas diaria", Severity.CRITICAL, 3000),
