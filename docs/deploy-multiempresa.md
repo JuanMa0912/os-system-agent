@@ -31,16 +31,18 @@ El **código** (este repo) es idéntico en todos los servidores. Solo la config 
 
 ## Prerrequisitos por servidor
 
-- Ubuntu (WSL2 o nativo), Python 3.11+, `uv` o venv, OpenClaw gateway local.
+- Ubuntu (WSL2 o nativo), Python 3.11+, **`uv`** (gestor de entorno/dependencias —
+  este proyecto NO usa `pip`/`venv` a mano; el venv de uv ni siquiera trae `pip`),
+  OpenClaw gateway local.
 - **Salida HTTPS (443) a `api.telegram.org`** (confírmalo con IT de la empresa).
 - Usuario `etl_monitor` (solo lectura). `etl_runner` no-root se agrega en Fase 2.
 
 ## Despliegue inicial (ejemplo: Mercamio)
 
 ```bash
-# 1) Código
+# 1) Código (uv gestiona el entorno; NO uses pip/venv a mano)
 git clone <repo> ~/os-system-agent && cd ~/os-system-agent
-python3.11 -m venv .venv && .venv/bin/pip install -e .
+uv sync
 
 # 2) Catálogo real (gitignored). Registra aquí cada ETL a medida que lo creas.
 cp config/alert-rules.example.yml config/alert-rules.yml
@@ -80,20 +82,24 @@ toca** — tus jobs reales quedan intactos.
 ```bash
 cd ~/os-system-agent
 git pull
-.venv/bin/pip install -e .        # solo si cambió el código Python (o: uv sync)
-.venv/bin/python -m pytest -q     # opcional: sanity
+uv sync                           # SOLO si cambiaron dependencias (no aplica a cambios de solo código)
+uv run pytest -q                  # opcional: sanity
 # si vas a agregar/editar ETLs, edita config/alert-rules.yml (no lo hace git)
 systemctl --user restart os-system-agent-daily.timer os-system-agent-alerts.timer
 ```
+
+> Nota: con `uv` el paquete queda instalado en modo editable, así que un cambio de
+> **solo código** (como este) queda activo con el `git pull` — **no** necesitas
+> `uv sync` ni reinstalar. `uv sync` es solo cuando cambian dependencias.
 
 ## Verificación
 
 ```bash
 # Dry-run local (no envía): debe encabezar con "Reporte empresa Mercamio"
-.venv/bin/python scripts/send_daily_report.py --server-alias local --catalog config/alert-rules.yml
+uv run python scripts/send_daily_report.py --server-alias local --catalog config/alert-rules.yml
 
 # Alertas en dry-run (no envía):
-.venv/bin/python scripts/alert_incidents.py --server-alias local --catalog config/alert-rules.yml
+uv run python scripts/alert_incidents.py --server-alias local --catalog config/alert-rules.yml
 
 # Envío real de prueba (usa el grupo): agrega --send con OS_TELEGRAM_TARGET puesto.
 ```

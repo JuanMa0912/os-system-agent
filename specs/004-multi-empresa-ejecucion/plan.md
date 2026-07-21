@@ -21,6 +21,12 @@ reached **outbound** by each agent — the two company networks never interconne
 Same code, deployed N times. Company identity + jobs come from **per-server
 config**, not from any runtime selection (no frontend, OpenClaw does not "select").
 
+## Tooling
+
+The project uses **`uv`** for env/deps on every box — `uv sync` to install, `uv run …`
+to run. **No `pip`/`venv` by hand** (uv's venv has no `pip`). systemd units invoke
+`uv run python scripts/…`. This holds for Mercamio, Dinastia, and any future empresa.
+
 ## Data flow
 
 Core is unchanged; only an empresa label is threaded through:

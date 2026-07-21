@@ -243,6 +243,8 @@ Phase 1 stack:
 - Agent gateway: OpenClaw.
 - Development assistant: Claude Code.
 - Runtime language for custom monitoring scripts: Python 3.11+.
+- Package/environment manager: **uv** (`uv sync` to install/update deps, `uv run …`
+  to run). Do NOT use `pip`/`venv` directly — the uv-managed venv has no `pip`.
 - Shell scripts only for simple system checks.
 - Notifications: Telegram first.
 - WhatsApp: optional later, dedicated assistant number only.
