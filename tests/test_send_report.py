@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import send_daily_report as sdr
+from os_system_agent.notify import send_via_telegram_api
 from os_system_agent.severity import Severity
 
 MINIMAL_CATALOG = """\
@@ -139,3 +140,34 @@ def test_main_only_incidents_stays_quiet_when_healthy(catalog: Path) -> None:
     )
     assert rc == 0
     assert recorder.calls == []  # dry-run mock is fresh -> INFO -> nothing to alert
+
+
+# --- direct Telegram delivery (no OpenClaw) --------------------------------
+
+def test_send_via_telegram_api_posts_expected_payload() -> None:
+    seen: dict[str, object] = {}
+
+    class _Resp:
+        def read(self) -> bytes:
+            return b'{"ok": true, "result": {}}'
+
+    def fake_opener(request, timeout):  # type: ignore[no-untyped-def]
+        seen["url"] = request.full_url
+        seen["data"] = request.data
+        seen["method"] = request.get_method()
+        return _Resp()
+
+    send_via_telegram_api(target="123", message="hola", token="777:tok", opener=fake_opener)
+    assert seen["url"] == "https://api.telegram.org/bot777:tok/sendMessage"
+    assert seen["method"] == "POST"
+    assert b'"chat_id": "123"' in seen["data"]  # type: ignore[operator]
+    assert b"hola" in seen["data"]  # type: ignore[operator]
+
+
+def test_main_direct_without_token_fails_closed(
+    catalog: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    # --direct selected but no token -> fail closed, nothing sent.
+    rc = sdr.main(["--catalog", str(catalog), "--send", "--direct", "--target", "123"])
+    assert rc == 2

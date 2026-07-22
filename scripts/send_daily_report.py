@@ -35,6 +35,7 @@ from os_system_agent.notify import (
     send_chunked,
     send_via_openclaw,  # re-exported for tests
     split_message,  # re-exported for tests
+    telegram_direct_sender,
 )
 from os_system_agent.reports.daily import overall_severity
 from os_system_agent.severity import Severity
@@ -76,6 +77,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="path to the openclaw CLI (falls back to OPENCLAW_BIN, then 'openclaw')",
     )
     parser.add_argument(
+        "--direct",
+        action="store_true",
+        help="deliver via the Telegram Bot API directly (needs TELEGRAM_BOT_TOKEN), not OpenClaw",
+    )
+    parser.add_argument(
         "--only-incidents",
         action="store_true",
         help="deliver only when something is WARNING or worse",
@@ -113,9 +119,21 @@ def main(argv: list[str] | None = None, *, sender: Sender | None = None) -> int:
         )
         return 2  # fail closed
 
-    active_sender = sender or default_sender(
-        args.openclaw_bin or os.environ.get("OPENCLAW_BIN", "openclaw")
-    )
+    if sender is not None:
+        active_sender = sender
+    elif args.direct:
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        if not token:
+            print(
+                "[send_daily_report] --direct needs TELEGRAM_BOT_TOKEN; refusing to send.",
+                file=sys.stderr,
+            )
+            return 2  # fail closed
+        active_sender = telegram_direct_sender(token)
+    else:
+        active_sender = default_sender(
+            args.openclaw_bin or os.environ.get("OPENCLAW_BIN", "openclaw")
+        )
     total = send_chunked(active_sender, args.channel, target, report)
 
     print(f"[send_daily_report] sent {total} message(s) to {args.channel}, overall={worst.value}.")
