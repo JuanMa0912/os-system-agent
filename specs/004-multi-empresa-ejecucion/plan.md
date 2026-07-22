@@ -59,11 +59,15 @@ verify → report → append audit line
 
 ## Bot / channel topology (confirmed)
 
-One Telegram **bot per empresa**, all added to one operator **group**. Each server
-holds only **its own** bot token (`TELEGRAM_BOT_TOKEN` in its `.env`) plus the
-shared group id (`OS_TELEGRAM_TARGET`). If one server is compromised, only that
-empresa's bot token leaks (and a bot token only sends as that bot). **Zero code
-change** — the send path is already env-driven.
+**One shared bot (`cortana`)** delivers every empresa's report to one operator
+**group**; messages are told apart by the `Reporte empresa <X>` label. cortana's
+token lives in each box's OpenClaw config, and the shared group id is
+`OS_TELEGRAM_TARGET`. Simplicity over isolation — a bot-per-empresa (one token per
+server) remains an option if stronger isolation is ever wanted. **Zero code
+change** — the send path is env-driven and the empresa label is already threaded.
+
+Monitoring source per box: **remote via SSH** when the agent runs off-box (Mercamio:
+MMAUTOML01 → `server232`) or **local** (`--server-alias local`) when co-located.
 
 ## Required scripts
 
