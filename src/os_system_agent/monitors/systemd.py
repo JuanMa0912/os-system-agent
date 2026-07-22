@@ -139,13 +139,21 @@ def evaluate_systemd(job: EtlJob, state: SystemdState, now: datetime) -> JobStat
         )
 
     if state.last_exit_at is None:
+        # No completed-run timestamp. An inactive unit whose Result is the default
+        # "success" (all systemd timestamps empty) has simply never run — say that
+        # plainly instead of a misleading "succeeded". An active unit may be
+        # mid-run with no exit time yet. Either way we fail closed (CRITICAL).
+        if state.active_state in ("active", "activating", "reloading"):
+            reason = "running (no exit timestamp yet)"
+        else:
+            reason = "no completed run recorded (unit never ran)"
         return JobStatus(
             job_id=job.id,
             name=job.name,
             severity=Severity.CRITICAL,
             delay_minutes=None,
             latest_at=None,
-            evidence=f"{state.unit}: succeeded but no ExecMainExitTimestamp",
+            evidence=f"{state.unit}: {reason}",
         )
 
     delay = (now - state.last_exit_at).total_seconds() / 60.0

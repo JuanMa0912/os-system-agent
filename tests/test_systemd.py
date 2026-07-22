@@ -27,6 +27,8 @@ SHOW_FAIL = (
     "ActiveState=failed\n"
 )
 SHOW_NEVER = "Result=success\nExecMainStatus=0\nExecMainExitTimestamp=\nActiveState=inactive\n"
+# Same empty-timestamp shape but the unit is currently active (mid-run).
+SHOW_RUNNING = "Result=success\nExecMainStatus=0\nExecMainExitTimestamp=\nActiveState=active\n"
 # A unit with SuccessExitStatus=3: exit 3 is success, so Result stays "success".
 SHOW_OK_EXIT3 = (
     "Result=success\n"
@@ -86,4 +88,16 @@ def test_missing_timestamp_fails_closed():
     state = parse_state(SHOW_NEVER, "etl-rotacion.service")
     assert state.last_exit_at is None
     now = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
-    assert evaluate_systemd(DAILY, state, now).severity is Severity.CRITICAL
+    status = evaluate_systemd(DAILY, state, now)
+    assert status.severity is Severity.CRITICAL
+    # Evidence must read as "never ran", not a misleading "succeeded".
+    assert "never ran" in status.evidence
+    assert "succeeded" not in status.evidence
+
+
+def test_active_without_exit_timestamp_reports_running():
+    state = parse_state(SHOW_RUNNING, "etl-rotacion.service")
+    now = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
+    status = evaluate_systemd(DAILY, state, now)
+    assert status.severity is Severity.CRITICAL  # still fail closed
+    assert "running" in status.evidence
