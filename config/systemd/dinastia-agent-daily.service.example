@@ -1,0 +1,51 @@
+# DINASTIA agente de monitoreo — reporte diario de ETLs (systemd USER service).
+#
+# CO-UBICADO: este agente corre EN el servidor de ETLs de Dinastia y monitorea
+# LOCAL (--server-alias local, sin SSH). Entrega el reporte por Telegram DIRECTO
+# (--direct, vía api.telegram.org con el bot cortana) — NO necesita OpenClaw.
+#
+# Distinto de las units que CORREN los ETLs (dinastia-ventas-daily.service, etc.):
+# esto solo LEE `systemctl status` de esas units y manda el reporte. Solo lectura.
+#
+# Instalar como el usuario del agente (p.ej. osagent), NO root:
+#   mkdir -p ~/.config/systemd/user
+#   cp config/systemd/dinastia-agent-daily.service.example \
+#      ~/.config/systemd/user/dinastia-agent-daily.service
+#   cp config/systemd/dinastia-agent-daily.timer.example \
+#      ~/.config/systemd/user/dinastia-agent-daily.timer
+#   # edita los placeholders de abajo, luego:
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now dinastia-agent-daily.timer
+#   loginctl enable-linger "$USER"   # corre aunque no haya sesión iniciada
+#
+# Placeholders (busca los valores reales en el box; NO se commitean):
+#   %h                  -> home del usuario (se expande solo)
+#   <UV_PATH>           -> `command -v uv`   p.ej. %h/.local/bin/uv
+#   <TELEGRAM_CHAT_ID>  -> chat id del grupo compartido (número negativo)
+#   <BOT_TOKEN_CORTANA> -> token del bot cortana (SECRETO; solo aquí, fuera de git)
+
+[Unit]
+Description=DINASTIA agente — reporte diario de ETLs a Telegram (directo, co-ubicado)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/os-system-agent
+
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+# Destino (grupo) — NO se commitea; se pone aquí en el box:
+Environment=OS_TELEGRAM_TARGET=<TELEGRAM_CHAT_ID>
+# Token del bot cortana para entrega DIRECTA (SECRETO, solo en el box):
+Environment=TELEGRAM_BOT_TOKEN=<BOT_TOKEN_CORTANA>
+
+# --live: estado real (local) · --send: entregar · --direct: sin OpenClaw
+# --server-alias local: monitorea ESTE servidor, no por SSH.
+ExecStart=<UV_PATH> run python scripts/send_daily_report.py \
+    --live --send --direct \
+    --server-alias local \
+    --channel telegram \
+    --catalog config/alert-rules.yml
+
+# Nunca colgar el box: tope duro de la corrida.
+TimeoutStartSec=180

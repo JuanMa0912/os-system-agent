@@ -107,11 +107,58 @@ OS_TELEGRAM_TARGET="<id_grupo>" \
 Checklist: (1) el reporte dice `Reporte empresa <X>`; (2) llega al grupo por cortana;
 (3) el agente no tiene config de otra empresa; (4) ningún secreto en el mensaje.
 
-## Luego: Dinastia
+## Dinastia (co-ubicado + entrega directa, sin OpenClaw)
 
-Mismos pasos en su box con `empresa: Dinastia`, el **mismo bot `cortana`** y el
-**mismo grupo** (`OS_TELEGRAM_TARGET` = mismo id). Si el agente vive en el servidor de
-Dinastia, usa `--server-alias local`.
+Dinastia corre el agente **EN su propio servidor de ETLs**, así que monitorea
+**local** (`--server-alias local`, sin SSH) y entrega por Telegram **directo**
+(`--direct`, POST a `api.telegram.org` con el bot cortana) — **no necesita el
+gateway de OpenClaw**. Mismo bot `cortana` y mismo grupo que Mercamio.
+
+> Dos familias de units, no confundir:
+> - **Units que CORREN los ETLs** (viven en `dinastia-etl/`): `dinastia-ventas-daily.service`,
+>   `dinastia-etl-margen.service`, `dinastia-rotacion-daily.service`. Corren como
+>   usuario de sistema (`User=dinastia…`) en `/etc/systemd/system/`.
+> - **Units del AGENTE de monitoreo** (este repo, `config/systemd/dinastia-agent-*`):
+>   `systemctl --user`, solo LEEN `systemctl status` de las anteriores y mandan Telegram.
+
+```bash
+# 1) Código
+git clone <repo> ~/os-system-agent && cd ~/os-system-agent
+uv sync
+
+# 2) Catálogo de Dinastia (gitignored). Ya trae los 3 ETLs registrados.
+cp config/alert-rules.dinastia.example.yml config/alert-rules.yml
+#   verifica: los `systemd_unit` coinciden con las units ETL instaladas en el box.
+
+# 3) systemd del agente (co-ubicado + directo). USER services:
+mkdir -p ~/.config/systemd/user
+cp config/systemd/dinastia-agent-daily.service.example  ~/.config/systemd/user/dinastia-agent-daily.service
+cp config/systemd/dinastia-agent-daily.timer.example    ~/.config/systemd/user/dinastia-agent-daily.timer
+cp config/systemd/dinastia-agent-alerts.service.example ~/.config/systemd/user/dinastia-agent-alerts.service
+cp config/systemd/dinastia-agent-alerts.timer.example   ~/.config/systemd/user/dinastia-agent-alerts.timer
+#   edita en cada .service: <UV_PATH>, OS_TELEGRAM_TARGET=<id grupo>,
+#   TELEGRAM_BOT_TOKEN=<token cortana>  (SECRETO — solo en el box, nunca en git)
+
+systemctl --user daemon-reload
+systemctl --user enable --now dinastia-agent-daily.timer dinastia-agent-alerts.timer
+loginctl enable-linger "$USER"
+```
+
+Verificación (co-ubicado, entrega directa):
+
+```bash
+# a) Dry-run (no envía) — confirma la etiqueta "Reporte empresa Dinastia":
+uv run python scripts/send_daily_report.py --catalog config/alert-rules.yml
+
+# b) Estado real LOCAL (sin enviar):
+uv run python scripts/send_daily_report.py --live --server-alias local \
+    --catalog config/alert-rules.yml
+
+# c) Prueba de canal — envío verde DIRECTO por cortana:
+OS_TELEGRAM_TARGET="<id_grupo>" TELEGRAM_BOT_TOKEN="<token_cortana>" \
+  uv run python scripts/send_daily_report.py --send --direct \
+    --catalog config/alert-rules.yml
+```
 
 ## Seguridad
 

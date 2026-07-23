@@ -1,0 +1,16 @@
+# DINASTIA agente — timer de alertas proactivas (systemd USER timer).
+# Va con dinastia-agent-alerts.service. Instalación en el .service.
+
+[Unit]
+Description=Correr el chequeo proactivo de incidentes ETL de Dinastia
+
+[Timer]
+# Cada 2 horas en el minuto :15 (desfasado de las ventanas :00 de los ETLs).
+# Las alertas disparan solo al cambiar, así que una cadencia más fina solo detecta
+# la falla antes — no genera spam. Horario también sirve (*-*-* *:15:00).
+OnCalendar=*-*-* 0/2:15:00
+Persistent=true
+RandomizedDelaySec=60
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,63 @@
+# config/alert-rules.dinastia.example.yml
+# CATÁLOGO DE MONITOREO — Dinastia (spec 004: un agente/catálogo por empresa).
+# En el box de Dinastia se copia a config/alert-rules.yml (gitignored):
+#   cp config/alert-rules.dinastia.example.yml config/alert-rules.yml
+#
+# El agente de Dinastia es CO-UBICADO: corre EN el mismo servidor que los ETLs y
+# monitorea local (--server-alias local, sin SSH). Ver docs/deploy-multiempresa.md.
+#
+# `systemd_unit` debe COINCIDIR con la unit real instalada en el box (los .service
+# de dinastia-etl/{ventas,margen,rotacion}/systemd/). El monitor solo consulta
+# `systemctl status <unit>` — es de solo lectura, no ejecuta nada.
+#
+# Los tres ETLs son diarios (~07:00–07:15 America/Bogota, igual que Mercamio), así
+# que un job recién está "tarde" tras ~un día:
+#   diario -> warning ~1500 (25h), critical ~1560 (26h).
+
+empresa: Dinastia
+
+jobs:
+  - id: dinastia_ventas
+    name: Ventas Diarias (documento x línea)
+    server: servidor-dinastia          # etiqueta para el reporte (co-ubicado = local)
+    systemd_unit: dinastia-ventas-daily.service
+    schedule: "daily 07:00"
+    expected_finish_before: "08:00"
+    freshness:
+      max_delay_minutes_warning: 1500   # ~25h — se saltó la corrida de hoy
+      max_delay_minutes_critical: 1560  # ~26h
+    paths:
+      logs: "/opt/dinastia-ventas/logs" # opcional; systemd status es la señal principal
+    alerts:
+      telegram: true
+      whatsapp: false
+
+  - id: dinastia_margen
+    name: Margen Diario (renglón x línea con costo)
+    server: servidor-dinastia
+    systemd_unit: dinastia-margen-daily.service
+    schedule: "daily 07:15"
+    expected_finish_before: "08:15"
+    freshness:
+      max_delay_minutes_warning: 1500
+      max_delay_minutes_critical: 1560
+    paths:
+      logs: "/opt/dinastia-margen/logs"
+    alerts:
+      telegram: true
+      whatsapp: false
+
+  - id: dinastia_rotacion
+    name: Rotación de Inventario (item x día x sede)
+    server: servidor-dinastia
+    systemd_unit: dinastia-rotacion-daily.service
+    schedule: "daily 07:00"
+    expected_finish_before: "08:00"
+    freshness:
+      max_delay_minutes_warning: 1500
+      max_delay_minutes_critical: 1560
+    paths:
+      logs: "/opt/dinastia-rotacion/logs"
+    alerts:
+      telegram: true
+      whatsapp: false

@@ -1,0 +1,18 @@
+# DINASTIA agente — timer del reporte diario (systemd USER timer).
+# Va con dinastia-agent-daily.service. Los pasos de instalación están en el .service.
+
+[Unit]
+Description=Correr el reporte diario de ETLs de Dinastia
+
+[Timer]
+# Dos digest al día: mañana (tras la ventana ETL de ~07:00–07:15) y tarde.
+# Varias líneas OnCalendar se combinan con OR — dispara en cada hora.
+OnCalendar=*-*-* 08:30:00
+OnCalendar=*-*-* 18:00:00
+# Si la máquina estuvo apagada a la hora prevista, correr al arrancar.
+Persistent=true
+# Reparte carga — 0..120s de retardo aleatorio.
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

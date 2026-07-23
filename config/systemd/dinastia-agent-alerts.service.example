@@ -1,0 +1,44 @@
+# DINASTIA agente de monitoreo — alertas proactivas de incidentes (USER service).
+#
+# Corre más seguido que el digest diario (ver el .timer) y manda alerta SOLO
+# cuando cambia el set de incidentes: incidente nuevo/escalado, recuperación, o el
+# servidor de ETLs caído. Silencioso si nada cambió (sin fatiga). El estado vive
+# en `.alert-state.json` en el repo (gitignored).
+#
+# CO-UBICADO + DIRECTO: monitorea LOCAL (--server-alias local) y entrega por
+# Telegram directo (--direct, bot cortana) — NO necesita OpenClaw.
+#
+# Instalar como el usuario del agente (p.ej. osagent), NO root:
+#   cp config/systemd/dinastia-agent-alerts.service.example \
+#      ~/.config/systemd/user/dinastia-agent-alerts.service
+#   cp config/systemd/dinastia-agent-alerts.timer.example \
+#      ~/.config/systemd/user/dinastia-agent-alerts.timer
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now dinastia-agent-alerts.timer
+#
+# Placeholders (NO se commitean):
+#   <UV_PATH>           -> `command -v uv`
+#   <TELEGRAM_CHAT_ID>  -> chat id del grupo compartido
+#   <BOT_TOKEN_CORTANA> -> token del bot cortana (SECRETO)
+
+[Unit]
+Description=DINASTIA agente — alertas proactivas de incidentes ETL (directo, co-ubicado)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/os-system-agent
+
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=OS_TELEGRAM_TARGET=<TELEGRAM_CHAT_ID>
+Environment=TELEGRAM_BOT_TOKEN=<BOT_TOKEN_CORTANA>
+
+# Corre el python del venv de uv directo (rápido, determinista; sin modelo).
+ExecStart=<UV_PATH> run python scripts/alert_incidents.py \
+    --send --direct \
+    --server-alias local \
+    --channel telegram \
+    --catalog config/alert-rules.yml
+
+TimeoutStartSec=120

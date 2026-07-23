@@ -102,3 +102,15 @@ def test_send_without_target_fails_closed(
     assert rc == 2
     assert rec.calls == []
     assert not state.exists()  # state not advanced -> alert retries next run
+
+
+def test_direct_without_token_fails_closed(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    state = tmp_path / "state.json"
+    monkeypatch.setattr(ai, "_current_incidents", _fixed_incidents(_incident("ventas")))
+    # --direct selected but no token -> fail closed, nothing sent, state untouched.
+    rc = ai.main(["--send", "--direct", "--target", "123", "--state-file", str(state)])
+    assert rc == 2
+    assert not state.exists()  # state not advanced -> alert retries next run

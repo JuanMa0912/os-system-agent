@@ -8,8 +8,12 @@ small JSON file. Read-only; never executes anything on the server.
 
 Meant to run from a systemd timer every 1-2h (more often than the daily digest).
 
+Delivery has two backends (same as the daily report): OpenClaw by default, or
+``--direct`` to POST straight to the Telegram Bot API (needs ``TELEGRAM_BOT_TOKEN``)
+for a co-located per-empresa box that does not run OpenClaw.
+
 Safety defaults (CLAUDE.md §14): dry-run unless ``--send``; refuses to send
-without a ``--target``/``OS_TELEGRAM_TARGET``.
+without a ``--target``/``OS_TELEGRAM_TARGET``; ``--direct`` refuses without a token.
 """
 
 from __future__ import annotations
@@ -31,7 +35,12 @@ from os_system_agent.alerting import (
 from os_system_agent.catalog import load_catalog
 from os_system_agent.collector import collect_statuses
 from os_system_agent.monitors.freshness import JobStatus
-from os_system_agent.notify import Sender, default_sender, send_chunked
+from os_system_agent.notify import (
+    Sender,
+    default_sender,
+    send_chunked,
+    telegram_direct_sender,
+)
 from os_system_agent.ssh_client import run_read_only
 
 DEFAULT_CATALOG = Path("config/alert-rules.yml")
@@ -87,6 +96,11 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser.add_argument("--openclaw-bin", default=None, help="falls back to OPENCLAW_BIN")
     parser.add_argument("--state-file", type=Path, default=DEFAULT_STATE)
     parser.add_argument("--send", action="store_true", help="actually deliver (default: print)")
+    parser.add_argument(
+        "--direct",
+        action="store_true",
+        help="deliver via the Telegram Bot API directly (needs TELEGRAM_BOT_TOKEN), not OpenClaw",
+    )
     return parser.parse_args(argv)
 
 
@@ -129,9 +143,21 @@ def main(argv: list[str] | None = None, *, sender: Sender | None = None) -> int:
         )
         return 2  # fail closed — do NOT update state, so the alert retries next run
 
-    active_sender = sender or default_sender(
-        args.openclaw_bin or os.environ.get("OPENCLAW_BIN", "openclaw")
-    )
+    if sender is not None:
+        active_sender = sender
+    elif args.direct:
+        token = os.environ.get("TELEGRAM_BOT_TOKEN")
+        if not token:
+            print(
+                "[alert_incidents] --direct needs TELEGRAM_BOT_TOKEN; refusing to send.",
+                file=sys.stderr,
+            )
+            return 2  # fail closed — do NOT update state, so the alert retries next run
+        active_sender = telegram_direct_sender(token)
+    else:
+        active_sender = default_sender(
+            args.openclaw_bin or os.environ.get("OPENCLAW_BIN", "openclaw")
+        )
     send_chunked(active_sender, args.channel, target, message)
     _save_state(args.state_file, outcome.state)
 
