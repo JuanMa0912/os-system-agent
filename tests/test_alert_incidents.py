@@ -64,9 +64,7 @@ def test_sends_on_new_incident_then_silent(monkeypatch: pytest.MonkeyPatch, tmp_
     assert rec2.calls == []
 
 
-def test_recovery_sends_and_clears_state(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_recovery_sends_and_clears_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     state = tmp_path / "state.json"
     state.write_text(json.dumps({"ventas": "CRITICAL"}), encoding="utf-8")
     monkeypatch.setattr(ai, "_current_incidents", _fixed_incidents())  # nothing active now
@@ -91,9 +89,7 @@ def test_dry_run_does_not_send_or_touch_state(
     assert not state.exists()
 
 
-def test_send_without_target_fails_closed(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_send_without_target_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("OS_TELEGRAM_TARGET", raising=False)
     state = tmp_path / "state.json"
     monkeypatch.setattr(ai, "_current_incidents", _fixed_incidents(_incident("ventas")))
@@ -104,9 +100,7 @@ def test_send_without_target_fails_closed(
     assert not state.exists()  # state not advanced -> alert retries next run
 
 
-def test_direct_without_token_fails_closed(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_direct_without_token_fails_closed(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     state = tmp_path / "state.json"
     monkeypatch.setattr(ai, "_current_incidents", _fixed_incidents(_incident("ventas")))
