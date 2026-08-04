@@ -10,8 +10,15 @@
 #   systemctl --user daemon-reload
 #   systemctl --user enable --now os-system-agent-alerts.timer
 #
-# Placeholders: <VENV_PYTHON> = <repo>/.venv/bin/python · <OPENCLAW_PATH> dir on
-# PATH · <TELEGRAM_CHAT_ID> = operator id (kept out of git).
+# Placeholders: <UV_PATH> = `command -v uv` · <OPENCLAW_PATH> dir on PATH ·
+# <TELEGRAM_CHAT_ID> = operator id (kept out of git).
+#
+# Shortcut: if the daily unit already works on this box, derive this one from it
+# instead of filling placeholders by hand — same PATH, same uv, same chat id:
+#   sed -e 's|send_daily_report\.py|alert_incidents.py|' \
+#       -e 's|--live --send|--send|' \
+#       ~/.config/systemd/user/os-system-agent-daily.service \
+#     > ~/.config/systemd/user/os-system-agent-alerts.service
 
 [Unit]
 Description=OS_SYSTEM_AGENT proactive ETL incident alerts
@@ -26,8 +33,13 @@ Environment=PATH=%h/.local/bin:%h/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
 Environment=OPENCLAW_BIN=<OPENCLAW_PATH>
 Environment=OS_TELEGRAM_TARGET=<TELEGRAM_CHAT_ID>
 
-# Runs the venv python directly (fast, deterministic; no model involved).
-ExecStart=<VENV_PYTHON> scripts/alert_incidents.py \
+# Runs through uv, like every other entrypoint in this project (the uv-managed
+# venv has no pip, so never invoke .venv/bin/python by hand). Fast and
+# deterministic; no model involved.
+#
+# NOTE: no --live flag here. Unlike send_daily_report.py, alert_incidents.py is
+# ALWAYS live (it hardcodes live=True); passing --live makes argparse fail.
+ExecStart=<UV_PATH> run python scripts/alert_incidents.py \
     --send \
     --channel telegram \
     --catalog config/alert-rules.yml
