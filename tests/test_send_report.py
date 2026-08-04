@@ -42,6 +42,7 @@ def catalog(tmp_path: Path) -> Path:
 
 # --- split_message ---------------------------------------------------------
 
+
 def test_split_message_keeps_short_text_intact() -> None:
     assert sdr.split_message("hola\nmundo") == ["hola\nmundo"]
 
@@ -63,6 +64,7 @@ def test_split_message_hard_slices_an_overlong_line() -> None:
 
 # --- should_send -----------------------------------------------------------
 
+
 def test_should_send_always_when_not_only_incidents() -> None:
     assert sdr.should_send(Severity.INFO, only_incidents=False) is True
 
@@ -74,6 +76,7 @@ def test_should_send_gates_on_incidents() -> None:
 
 
 # --- send_via_openclaw -----------------------------------------------------
+
 
 def test_send_via_openclaw_builds_argv_without_shell() -> None:
     seen: dict[str, object] = {}
@@ -87,8 +90,15 @@ def test_send_via_openclaw_builds_argv_without_shell() -> None:
         channel="telegram", target="123", message="hi", binary="openclaw", run=fake_run
     )
     assert seen["cmd"] == [
-        "openclaw", "message", "send",
-        "--channel", "telegram", "--target", "123", "--message", "hi",
+        "openclaw",
+        "message",
+        "send",
+        "--channel",
+        "telegram",
+        "--target",
+        "123",
+        "--message",
+        "hi",
     ]
 
 
@@ -102,6 +112,7 @@ def test_send_via_openclaw_raises_on_nonzero_exit() -> None:
 
 # --- main ------------------------------------------------------------------
 
+
 def test_main_dry_run_does_not_send(catalog: Path) -> None:
     recorder = _Recorder()
     rc = sdr.main(["--catalog", str(catalog), "--target", "123"], sender=recorder)
@@ -111,9 +122,7 @@ def test_main_dry_run_does_not_send(catalog: Path) -> None:
 
 def test_main_send_delivers_report(catalog: Path) -> None:
     recorder = _Recorder()
-    rc = sdr.main(
-        ["--catalog", str(catalog), "--send", "--target", "123"], sender=recorder
-    )
+    rc = sdr.main(["--catalog", str(catalog), "--send", "--target", "123"], sender=recorder)
     assert rc == 0
     assert len(recorder.calls) == 1
     channel, target, message = recorder.calls[0]
@@ -143,6 +152,7 @@ def test_main_only_incidents_stays_quiet_when_healthy(catalog: Path) -> None:
 
 
 # --- direct Telegram delivery (no OpenClaw) --------------------------------
+
 
 def test_send_via_telegram_api_posts_expected_payload() -> None:
     seen: dict[str, object] = {}

@@ -48,6 +48,7 @@ def test_assert_raises_on_unsafe():
 
 # --- local runner (co-located deployment, spec 004 T3) ---------------------
 
+
 def test_local_runner_rejects_unsafe_before_executing():
     # Fails closed: the allowlist is enforced before any subprocess runs.
     with pytest.raises(UnsafeCommandError):

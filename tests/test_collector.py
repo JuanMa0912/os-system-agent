@@ -69,8 +69,7 @@ def test_collect_live_uses_injected_runner() -> None:
     assert status.delay_minutes is not None and 0 <= status.delay_minutes < 10
     assert "test.service" in status.evidence
     assert calls == [
-        "systemctl show test.service -p Id,Result,ExecMainStatus,"
-        "ExecMainExitTimestamp,ActiveState"
+        "systemctl show test.service -p Id,Result,ExecMainStatus,ExecMainExitTimestamp,ActiveState"
     ]
 
 
