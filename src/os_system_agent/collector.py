@@ -44,9 +44,7 @@ def collect_live(
     runner: Runner = run_read_only,
 ) -> list[JobStatus]:
     """Read real last-run status over read-only SSH in ONE ``systemctl show`` call."""
-    pairs: list[tuple[EtlJob, str]] = [
-        (job, job.systemd_unit) for job in jobs if job.systemd_unit
-    ]
+    pairs: list[tuple[EtlJob, str]] = [(job, job.systemd_unit) for job in jobs if job.systemd_unit]
     if not pairs:
         return []
 
