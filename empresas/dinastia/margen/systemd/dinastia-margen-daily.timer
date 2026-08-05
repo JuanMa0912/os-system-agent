@@ -1,0 +1,12 @@
+# Dinastia margen — timer daily (diario 07:15). Va con dinastia-margen-daily.service.
+[Unit]
+Description=Dinastia margen - timer daily (diario 07:15)
+
+[Timer]
+OnCalendar=*-*-* 07:15:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=dinastia-margen-daily.service
+
+[Install]
+WantedBy=timers.target

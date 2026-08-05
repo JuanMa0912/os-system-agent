@@ -1,0 +1,32 @@
+# Copia este archivo como config/rotacion.ps1 y llena los valores.
+# No subas config/rotacion.ps1 a Git.
+
+$env:PGCONNECT_TIMEOUT = "15"
+
+$env:TARGET_PGHOST = "192.168.35.232"
+$env:TARGET_PGPORT = "5432"
+$env:TARGET_PGDATABASE = "produXdia"
+$env:TARGET_PGUSER = "etl_rotacion"
+$env:TARGET_PGPASSWORD = ""
+
+$env:SRC_MERCAMIO_PGHOST = "192.168.35.217"
+$env:SRC_MERCAMIO_PGPORT = "5432"
+$env:SRC_MERCAMIO_PGDATABASE = "mercamio"
+$env:SRC_MERCAMIO_PGUSER = "mercamio"
+$env:SRC_MERCAMIO_PGPASSWORD = ""
+
+$env:SRC_MTODO_PGHOST = "192.168.35.217"
+$env:SRC_MTODO_PGPORT = "5432"
+$env:SRC_MTODO_PGDATABASE = "mtodo"
+$env:SRC_MTODO_PGUSER = "mtodo"
+$env:SRC_MTODO_PGPASSWORD = ""
+
+$env:SRC_BOGOTA_PGHOST = "192.168.35.217"
+$env:SRC_BOGOTA_PGPORT = "5432"
+$env:SRC_BOGOTA_PGDATABASE = "bogota"
+$env:SRC_BOGOTA_PGUSER = "bogota"
+$env:SRC_BOGOTA_PGPASSWORD = ""
+
+$env:ETL_LOG_DIR = "logs"
+$env:ETL_DB_LOG_RETENTION_DAYS = "31"
+$env:ETL_FILE_LOG_RETENTION_DAYS = "31"

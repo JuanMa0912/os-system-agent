@@ -1,0 +1,63 @@
+# =============================================================================
+# Dinastia MARGEN pipeline — configuration TEMPLATE.
+# Copy to config/pipeline_config.yaml on the box. NO SECRETS: ${VAR} placeholders
+# are expanded from the environment at load time (fail-closed if a secret is unset
+# unless it has a ":-default").
+# =============================================================================
+timezone: America/Bogota
+
+paths:
+  etl_dir:  /opt/dinastia-margen/etl
+  logs_dir: /opt/dinastia-margen/logs
+
+logging:
+  format: "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+  retention_days: 14
+
+execution:
+  max_retries: 3
+  retry_delay_seconds: 60
+  etl_timeout: 1800
+
+# --- SOURCE: Siesa/Biable ERP on MySQL 8.0 (READ-ONLY, SELECT only) ----------
+source:
+  mysql:
+    host: 192.168.30.1
+    port: 3306
+    database: BD_BIABLE01
+    user: ${DINASTIA_MYSQL_USER}         # cuenta read-only del ERP (por env)
+    password: ${DINASTIA_MYSQL_PASSWORD}  # por env — NUNCA en el archivo
+    charset: utf8mb4
+    connect_timeout: 15
+    read_timeout: 600
+    enforce_read_only: true
+
+  # Códigos Dinastia (ver memoria dinastia-etl-mapeos-mercamio).
+  filters:
+    categoria: "1"                        # ITEMS.ID_TIPO 'mercado' (Mercamio '3','4')
+    linea_impoconsumo: "50,51"            # LICORES(50)+CIGARRILLOS(51): bruto incluye impoconsumo (coma-separado)
+    id_empresa: ""                        # ID_EMP de Dinastia (etiqueta; confirmar, opcional)
+
+# --- DESTINATION: GCP (Dinastia = Cloud SQL for PostgreSQL) -------------------
+target:
+  type: cloudsql_postgres
+
+  cloudsql_postgres:
+    host: ${GCP_CLOUDSQL_HOST:-}
+    port: 5432
+    database: ${GCP_CLOUDSQL_DB:-dinastia}
+    user: ${GCP_CLOUDSQL_USER:-}
+    password: ${GCP_CLOUDSQL_PASSWORD:-}
+    sslmode: ${GCP_CLOUDSQL_SSLMODE:-require}
+    schema: public
+    table: margen_dinastia
+    # Vistas materializadas a refrescar tras cada carga exitosa (las crea el equipo
+    # de BI). [] = no refresca nada. Auto-detecta función (SELECT f()) vs vista mat.
+    refresh_views: ["refresh_margen_dinastia_roll"]
+    write_mode: replace_by_date           # borra la partición (empresa,fecha_dcto) y reinserta
+
+# Reporte por Telegram (bot cortana directo). El token y el chat id van por
+# entorno: TELEGRAM_BOT_TOKEN y OS_TELEGRAM_TARGET (NO en este archivo).
+report:
+  empresa: Dinastia

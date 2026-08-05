@@ -1,0 +1,14 @@
+# Dinastia ventas pipeline — runtime dependencies (loose pins; Python 3.11+).
+# The project standardizes on uv:  uv sync   (creates the venv & installs these).
+
+# --- Core (always needed) ----------------------------------------------------
+PyMySQL>=1.1,<2.0        # MySQL source driver (pure Python; no C build needed)
+PyYAML>=6.0,<7.0         # config loading
+tzdata>=2024.1           # IANA tz db for zoneinfo (Debian has it system-wide; this
+                         # keeps ZoneInfo("America/Bogota") working on Windows/WSL too)
+
+# --- GCP destination: Cloud SQL for PostgreSQL (direct IP + Authorized nets) ---
+psycopg2-binary>=2.9,<3.0    # Postgres driver for the Cloud SQL loader
+
+# BigQuery (not used; uncomment if you switch target.type = bigquery):
+# google-cloud-bigquery>=3.20,<4.0

@@ -1,0 +1,31 @@
+# Reference copies pulled from Mercamio's servers — DO NOT COMMIT.
+# They carry internal table/column names and at least one hardcoded credential
+# in the originals (Mercamio's fruver_ventas_rango.py). Kept local only.
+_reference/
+
+# Secrets & real config
+.env
+*.env
+!*.env.example
+config.yaml
+config.local.yaml
+*config.local.*
+*.key
+*.pem
+schema_*.sql
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+_resync_box/

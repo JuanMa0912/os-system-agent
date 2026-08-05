@@ -14,6 +14,17 @@ audit-ledger.jsonl
 config/alert-rules.yml
 *.bak
 
+# ETL de empresas (empresas/**): SOLO se versionan los *.example.
+# Los configs reales llevan credenciales del ERP y de GCP y viven en cada box.
+empresas/**/config/pipeline_config.yaml
+empresas/**/config/rotacion.env
+empresas/**/config/rotacion.ps1
+empresas/**/.venv/
+empresas/**/logs/
+# Volcados de esquema del ERP: pesados y con detalle interno del cliente.
+empresas/**/schema_*.sql
+empresas/**/esquema.sql
+
 # Python
 __pycache__/
 *.py[cod]

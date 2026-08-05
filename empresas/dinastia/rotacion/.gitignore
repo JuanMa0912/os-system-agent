@@ -1,0 +1,15 @@
+# Config con datos reales (host/usuario) y cualquier secreto — NUNCA commit
+config.yaml
+*.env
+.env
+.env.*
+
+# Logs
+logs/
+*.log
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.uv/

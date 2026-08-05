@@ -1,0 +1,13 @@
+# Entorno local
+.venv/
+__pycache__/
+*.py[cod]
+
+# Logs generados por el ETL
+logs/*.log
+
+# Archivos reales con claves. Conserva solo los ejemplos.
+config/rotacion.env
+config/rotacion.ps1
+!config/rotacion.env.example
+!config/rotacion.ps1.example

@@ -1,0 +1,12 @@
+# Dinastia margen — timer weekly (sabado 20:15). Va con dinastia-margen-weekly.service.
+[Unit]
+Description=Dinastia margen - timer weekly (sabado 20:15)
+
+[Timer]
+OnCalendar=Sat *-*-* 20:15:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=dinastia-margen-weekly.service
+
+[Install]
+WantedBy=timers.target

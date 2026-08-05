@@ -1,0 +1,12 @@
+# Dinastia ventas — timer daily (diario 07:00). Va con dinastia-ventas-daily.service.
+[Unit]
+Description=Dinastia ventas - timer daily (diario 07:00)
+
+[Timer]
+OnCalendar=*-*-* 07:00:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=dinastia-ventas-daily.service
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,17 @@
+[Unit]
+Description=ETL rotacion rolling 15 dias (nocturno)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=etlrotacion
+Group=etlrotacion
+WorkingDirectory=/opt/etl_rotacion
+EnvironmentFile=/opt/etl_rotacion/config/rotacion.env
+ExecStart=/opt/etl_rotacion/.venv/bin/python /opt/etl_rotacion/etl_rotacion_incremental_3bd.py --mode rolling --rolling-days 15 --log-dir /var/log/etl_rotacion
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/var/log/etl_rotacion

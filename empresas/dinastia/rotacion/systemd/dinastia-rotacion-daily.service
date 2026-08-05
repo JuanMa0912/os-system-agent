@@ -1,0 +1,33 @@
+# Dinastia rotacion — carga diaria (ayer) (systemd, usuario NO-root osagent).
+# Template: copia a /etc/systemd/system/ y ajusta si tu usuario/ruta difieren.
+# Secretos (ERP + GCP + TELEGRAM) en /etc/dinastia/dinastia.env (formato KEY=value,
+# 0640 root:osagent) — NO en el repo. run_pipeline hace: carga + refresco vistas + reporte.
+[Unit]
+Description=Dinastia rotacion - carga diaria (ayer)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=osagent
+Group=osagent
+WorkingDirectory=/opt/dinastia-rotacion
+Environment=DINASTIA_ETL_CONFIG=/opt/dinastia-rotacion/config/pipeline_config.yaml
+EnvironmentFile=/etc/dinastia/dinastia.env
+ExecStart=/opt/dinastia-rotacion/.venv/bin/python scripts/run_pipeline.py --mode daily
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+RestrictSUIDSGID=true
+ReadWritePaths=/opt/dinastia-rotacion/logs
+
+TimeoutStartSec=3600
+Nice=10
+
+[Install]
+WantedBy=multi-user.target
