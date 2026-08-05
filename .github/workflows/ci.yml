@@ -8,6 +8,11 @@ on:
 
 permissions:
   contents: read
+  # gitleaks-action lista los commits del PR via la API. En un repo publico le
+  # bastaba `contents: read`; desde que el repo es privado necesita este permiso
+  # explicito o falla con 403 "Resource not accessible by integration" — y falla
+  # SIN escanear, que es lo peligroso: parece un hallazgo y no lo es.
+  pull-requests: read
 
 jobs:
   lint-test:

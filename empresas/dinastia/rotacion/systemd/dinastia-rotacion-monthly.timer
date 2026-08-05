@@ -1,0 +1,12 @@
+# Dinastia rotacion — timer monthly (1er domingo 18:30). Va con dinastia-rotacion-monthly.service.
+[Unit]
+Description=Dinastia rotacion - timer monthly (1er domingo 18:30)
+
+[Timer]
+OnCalendar=Sun *-*-01..07 18:30:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=dinastia-rotacion-monthly.service
+
+[Install]
+WantedBy=timers.target

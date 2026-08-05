@@ -1,0 +1,12 @@
+# Dinastia ventas — timer weekly (sabado 20:00). Va con dinastia-ventas-weekly.service.
+[Unit]
+Description=Dinastia ventas - timer weekly (sabado 20:00)
+
+[Timer]
+OnCalendar=Sat *-*-* 20:00:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=dinastia-ventas-weekly.service
+
+[Install]
+WantedBy=timers.target

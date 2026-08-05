@@ -1,0 +1,10 @@
+[Unit]
+Description=Timer ETL rotacion rolling 15 dias a la 1:00 a. m.
+
+[Timer]
+OnCalendar=*-*-1,11,21 01:00:00
+Persistent=true
+Unit=etl-rotacion-rolling.service
+
+[Install]
+WantedBy=timers.target

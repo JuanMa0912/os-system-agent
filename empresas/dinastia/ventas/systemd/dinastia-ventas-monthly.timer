@@ -1,0 +1,12 @@
+# Dinastia ventas — timer monthly (1er domingo 18:00). Va con dinastia-ventas-monthly.service.
+[Unit]
+Description=Dinastia ventas - timer monthly (1er domingo 18:00)
+
+[Timer]
+OnCalendar=Sun *-*-01..07 18:00:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=dinastia-ventas-monthly.service
+
+[Install]
+WantedBy=timers.target

@@ -39,8 +39,16 @@ src/os_system_agent/   Python package (config, redaction, severity, ssh safety, 
 scripts/               Operational entry points (Phase 1 skeletons)
 tests/                 Unit tests + eval runner
 evals/                 Versioned golden cases (severity, redaction)
+empresas/              Per-company ETL code the agent watches (see empresas/README.md)
 .github/               CI (ruff + pytest + gitleaks), issue/PR templates
 ```
+
+> **This repository is PRIVATE.** Everything above the `empresas/` line is the
+> monitoring agent — read-only by design. `empresas/` holds the actual ETL code
+> for each company, which *does* write to production databases, plus client
+> names, ERP schemas and business rules. The two live together so each box pulls
+> once and gets what it needs; the read-only boundary between them is enforced by
+> convention and by `CLAUDE.md` §4, not by repository separation.
 
 ## Quickstart (development)
 

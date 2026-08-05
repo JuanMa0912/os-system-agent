@@ -1,0 +1,89 @@
+# =============================================================================
+# Dinastia ventas pipeline — configuration TEMPLATE.
+#
+# Copy to a real path (e.g. /opt/dinastia-ventas/config/pipeline_config.yaml) and
+# point the orchestrator/ETLs at it via --config or the DINASTIA_ETL_CONFIG env.
+#
+# NO SECRETS IN THIS FILE. ${VAR} placeholders are expanded from the environment
+# at load time (systemd EnvironmentFile= on the box). A ${VAR} with no value and
+# no ":-default" makes config loading FAIL CLOSED (never runs with a blank secret).
+#   Syntax: ${VAR}  or  ${VAR:-fallback}
+# =============================================================================
+
+timezone: America/Bogota   # ERP / business timezone (used for "yesterday" & reports)
+
+paths:
+  etl_dir:  /opt/dinastia-ventas/etl     # where the ETL scripts live
+  logs_dir: /opt/dinastia-ventas/logs    # orchestrator logs + JSON run reports
+
+logging:
+  format: "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+  retention_days: 14                     # older *.log / report_*.json are pruned
+
+execution:
+  max_retries: 3                         # attempts per ETL
+  retry_delay_seconds: 60                # wait between retries
+  etl_timeout: 1800                      # per-ETL hard timeout (seconds)
+  validation_weeks: [1, 3]               # weeks-of-month the monthly re-validation runs
+  # python_executable: /opt/dinastia-ventas/.venv/bin/python  # optional; default = current interpreter
+
+# --- SOURCE: Siesa/Biable ERP on MySQL 8.0 (READ-ONLY, SELECT only) ----------
+source:
+  mysql:
+    host: 192.168.30.1                   # ERP host (internal)
+    port: 3306
+    database: BD_BIABLE01
+    user: ${DINASTIA_MYSQL_USER}         # the read-only ERP account — from env, never committed
+    password: ${DINASTIA_MYSQL_PASSWORD} # from env — NEVER commit
+    charset: utf8mb4
+    connect_timeout: 15                  # seconds
+    read_timeout: 600                    # seconds (heavy line query)
+    enforce_read_only: true              # SET SESSION TRANSACTION READ ONLY (fail closed)
+
+  # Category/line filters — mirror Mercamio's CATEGORIA/LINEA1 (empty = all lines).
+  # Mercamio "fruver" used categoria="4", linea1="01"; Dinastia default = all.
+  filters:
+    categoria: ""                        # ITEMS.ID_TIPO   (empty = all categories)
+    linea1: ""                           # ITEMS.ID_LINEA1 (empty = all lines)
+
+# --- DESTINATION: GCP (Dinastia = Cloud SQL for PostgreSQL) -------------------
+# Pick ONE and set target.type. Only the selected section's ${VARs} are required.
+target:
+  type: cloudsql_postgres                # bigquery | cloudsql_postgres  (Dinastia -> Cloud SQL PG)
+
+  bigquery:
+    project: ${GCP_PROJECT:-}
+    dataset: dinastia_ventas
+    table: rentabilidad_linea
+    location: US
+    credentials_env: GOOGLE_APPLICATION_CREDENTIALS   # path to service-account json
+    write_mode: upsert                   # append | replace_by_date | upsert
+
+  cloudsql_postgres:
+    instance_connection_name: ${GCP_CLOUDSQL_INSTANCE:-}   # proj:region:inst (connector), optional
+    host: ${GCP_CLOUDSQL_HOST:-}         # or a direct host/IP over VPN
+    port: 5432
+    database: ${GCP_CLOUDSQL_DB:-dinastia}
+    user: ${GCP_CLOUDSQL_USER:-}
+    password: ${GCP_CLOUDSQL_PASSWORD:-}
+    schema: public
+    sslmode: ${GCP_CLOUDSQL_SSLMODE:-require}   # public IP + Authorized networks -> SSL
+    table: ventas_dinastia
+    # Vistas materializadas a refrescar tras cada carga exitosa (las crea el equipo
+    # de BI). [] = no refresca nada. Ej: ["ventas_resumen_mv", "ventas_dia_mv"].
+    refresh_views: []
+    write_mode: replace_by_date                 # borra la particion (empresa_bd,fecha_dcto) y reinserta
+
+# --- ETLs the orchestrator runs. Light ones in parallel; heavy ones sequential.
+etls:
+  parallel:
+    - name: ventas_linea                 # -> etl/ventas_rango.py
+      script: ventas_rango.py
+      priority: 1
+  sequential: []                         # add heavy per-line/per-store ETLs here later
+
+# Reporte por Telegram (bot cortana directo). El token y el chat id van por
+# entorno: TELEGRAM_BOT_TOKEN y OS_TELEGRAM_TARGET (NO en este archivo).
+report:
+  empresa: Dinastia

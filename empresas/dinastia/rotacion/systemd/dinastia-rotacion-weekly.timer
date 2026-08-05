@@ -1,0 +1,12 @@
+# Dinastia rotacion — timer weekly (sabado 20:30). Va con dinastia-rotacion-weekly.service.
+[Unit]
+Description=Dinastia rotacion - timer weekly (sabado 20:30)
+
+[Timer]
+OnCalendar=Sat *-*-* 20:30:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=dinastia-rotacion-weekly.service
+
+[Install]
+WantedBy=timers.target

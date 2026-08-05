@@ -1,0 +1,12 @@
+# Dinastia margen — timer monthly (1er domingo 18:15). Va con dinastia-margen-monthly.service.
+[Unit]
+Description=Dinastia margen - timer monthly (1er domingo 18:15)
+
+[Timer]
+OnCalendar=Sun *-*-01..07 18:15:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=dinastia-margen-monthly.service
+
+[Install]
+WantedBy=timers.target

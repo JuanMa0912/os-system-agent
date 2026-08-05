@@ -1,0 +1,12 @@
+# Dinastia rotacion — timer daily (diario 07:30). Va con dinastia-rotacion-daily.service.
+[Unit]
+Description=Dinastia rotacion - timer daily (diario 07:30)
+
+[Timer]
+OnCalendar=*-*-* 07:30:00
+Persistent=true
+RandomizedDelaySec=120
+Unit=dinastia-rotacion-daily.service
+
+[Install]
+WantedBy=timers.target
