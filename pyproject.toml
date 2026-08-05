@@ -51,6 +51,12 @@ packages = ["src/os_system_agent"]
 line-length = 100
 target-version = "py311"
 src = ["src", "tests", "scripts"]
+# `empresas/` es codigo ETL de produccion que llego de otros repos, con su propio
+# historial y su propio estilo. Se versiona aqui para poder desplegarlo con un
+# `git pull`, no para reformatearlo: pasarle este linter daria 277 hallazgos y
+# empujaria a editar codigo que hoy corre bien en produccion. Se excluye a
+# proposito. El agente (`src/`, `scripts/`, `tests/`) si se lintea.
+extend-exclude = ["empresas"]
 
 [tool.ruff.lint]
 # E/W pycodestyle, F pyflakes, I isort, UP pyupgrade, B bugbear, S bandit (security)
