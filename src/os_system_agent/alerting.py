@@ -102,12 +102,12 @@ def render_alert(
         lines.append("Incidentes:")
         for status in to_alert:
             tag = CHAT_TAG.get(status.severity, "?")
-            lines.append(f"{tag} · {redact(status.name)}: {redact(status.evidence)}")
+            lines.append(f"{tag} {redact(status.name)}: {redact(status.evidence)}")
 
     if recovered:
         lines.append("")
         lines.append("Recuperados:")
         for job_id in recovered:
-            lines.append(f"OK · {redact(names.get(job_id, job_id))}")
+            lines.append(f"{CHAT_TAG[Severity.INFO]} {redact(names.get(job_id, job_id))}")
 
     return "\n".join(lines)

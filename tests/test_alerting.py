@@ -85,9 +85,9 @@ def test_render_alert_lists_incidents_and_recoveries() -> None:
         names={"rotacion": "Rotación diaria"},
     )
     assert "cambios ETL 2026-07-06 · server232" in message
-    assert "CRIT · Job ventas: ventas.service: Result=failed" in message
+    assert "❌ Job ventas: ventas.service: Result=failed" in message
     assert "Recuperados:" in message
-    assert "OK · Rotación diaria" in message
+    assert "✅ Rotación diaria" in message
     assert "|" not in message  # no markdown table
 
 
@@ -95,7 +95,7 @@ def test_render_alert_recovered_falls_back_to_id() -> None:
     message = render_alert(
         server="s", report_date=TODAY, to_alert=[], recovered=["some-job"], names=None
     )
-    assert "OK · some-job" in message
+    assert "✅ some-job" in message
 
 
 def test_render_alert_names_empresa_in_header() -> None:

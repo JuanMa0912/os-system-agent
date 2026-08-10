@@ -111,12 +111,15 @@ def render_daily_report(
     return "\n".join(lines)
 
 
-# Short severity tags for the compact chat format (token-cheap, plain ASCII).
+# Iconos del reporte de chat. Telegram los renderiza nativamente y se leen de un
+# vistazo en el celular, que es donde el operador consume esto: la palomita basta
+# para pasar de largo y la X salta sola. Texto plano ("OK ·", "CRIT ·") obligaba a
+# leer doce líneas para encontrar la que importaba.
 CHAT_TAG: dict[Severity, str] = {
-    Severity.INFO: "OK",
-    Severity.WARNING: "WARN",
-    Severity.CRITICAL: "CRIT",
-    Severity.SECURITY: "SEC",
+    Severity.INFO: "✅",
+    Severity.WARNING: "⚠️",
+    Severity.CRITICAL: "❌",
+    Severity.SECURITY: "🚨",
 }
 
 
@@ -164,13 +167,13 @@ def render_chat_report(
         tag = CHAT_TAG.get(status.severity, "?")
         when = status.latest_at.strftime("%m-%d %H:%M") if status.latest_at else "—"
         age = _humanize_minutes(status.delay_minutes)
-        lines.append(f"{tag} · {redact(status.name)} — hace {age} ({when})")
+        lines.append(f"{tag} {redact(status.name)} — hace {age} ({when})")
 
     detail = incidents + warnings
     if detail:
         lines.append("")
         for status in detail:
-            lines.append(f"! {redact(status.name)}: {redact(status.evidence)}")
+            lines.append(f"↳ {redact(status.name)}: {redact(status.evidence)}")
 
     return "\n".join(lines)
 

@@ -95,9 +95,14 @@ def test_missing_timestamp_fails_closed():
     assert "succeeded" not in status.evidence
 
 
-def test_active_without_exit_timestamp_reports_running():
+def test_active_without_exit_timestamp_reports_running_as_info():
+    """Mid-run is NOT a failure: systemd just cleared ExecMainExitTimestamp.
+
+    Reporting CRITICAL here caused a real false alarm on 2026-08-09, when the
+    check caught visor-etl-reconcile during its normal 32-minute run.
+    """
     state = parse_state(SHOW_RUNNING, "etl-rotacion.service")
     now = datetime(2026, 7, 6, 12, 0, tzinfo=UTC)
     status = evaluate_systemd(DAILY, state, now)
-    assert status.severity is Severity.CRITICAL  # still fail closed
-    assert "running" in status.evidence
+    assert status.severity is Severity.INFO
+    assert "en ejecución" in status.evidence
