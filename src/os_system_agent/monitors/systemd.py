@@ -139,21 +139,36 @@ def evaluate_systemd(job: EtlJob, state: SystemdState, now: datetime) -> JobStat
         )
 
     if state.last_exit_at is None:
-        # No completed-run timestamp. An inactive unit whose Result is the default
-        # "success" (all systemd timestamps empty) has simply never run — say that
-        # plainly instead of a misleading "succeeded". An active unit may be
-        # mid-run with no exit time yet. Either way we fail closed (CRITICAL).
+        # systemd CLEARS ExecMainExitTimestamp while a unit is running, so a job
+        # caught mid-run looks exactly like one that never ran. They are opposite
+        # situations and must not share a severity.
         if state.active_state in ("active", "activating", "reloading"):
-            reason = "running (no exit timestamp yet)"
-        else:
-            reason = "no completed run recorded (unit never ran)"
+            # Running right now: nothing is wrong, we simply cannot judge freshness
+            # until it finishes. Reporting CRITICAL here produced a real false alarm
+            # on 2026-08-09, when the alert check caught visor-etl-reconcile during
+            # its normal 32-minute run and then "recovered" on its own minutes later.
+            #
+            # Trade-off, on purpose: a unit hung forever also reads INFO. Accepted
+            # because a stuck job stops refreshing its destination, and the freshness
+            # signal is what catches that — not this branch. Alert fatigue would cost
+            # more than the delay (CLAUDE.md §12, NFR "no fatigue" of spec 003).
+            return JobStatus(
+                job_id=job.id,
+                name=job.name,
+                severity=Severity.INFO,
+                delay_minutes=None,
+                latest_at=None,
+                evidence=f"{state.unit}: en ejecución ({state.active_state})",
+            )
+        # Inactive with every timestamp empty: it has never run. Say it plainly
+        # instead of a misleading "succeeded", and fail closed.
         return JobStatus(
             job_id=job.id,
             name=job.name,
             severity=Severity.CRITICAL,
             delay_minutes=None,
             latest_at=None,
-            evidence=f"{state.unit}: {reason}",
+            evidence=f"{state.unit}: no completed run recorded (unit never ran)",
         )
 
     delay = (now - state.last_exit_at).total_seconds() / 60.0

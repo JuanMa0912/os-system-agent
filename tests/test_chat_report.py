@@ -50,8 +50,8 @@ def test_chat_report_one_line_per_job_and_no_table() -> None:
 
     assert "OS_SYSTEM_AGENT · ETL 2026-07-06 · server232" in report
     assert "Estado: INFO · incidentes: 0 · avisos: 0" in report
-    assert "OK · Ventas diaria — hace 7h 45m (07-06 07:56)" in report
-    assert "OK · Rotación — hace 6h 53m (07-06 07:56)" in report
+    assert "✅ Ventas diaria — hace 7h 45m (07-06 07:56)" in report
+    assert "✅ Rotación — hace 6h 53m (07-06 07:56)" in report
     assert "|" not in report  # never a markdown table
 
 
@@ -76,6 +76,6 @@ def test_chat_report_lists_incidents_and_counts() -> None:
     report = render_chat_report(server="server232", report_date=WHEN.date(), statuses=statuses)
 
     assert "incidentes: 1 · avisos: 1" in report
-    assert "CRIT · Ventas diaria" in report
-    assert "! Ventas diaria: Ventas diaria.service: success" in report
-    assert "! Rotación:" in report
+    assert "❌ Ventas diaria" in report
+    assert "↳ Ventas diaria: Ventas diaria.service: success" in report
+    assert "↳ Rotación:" in report
