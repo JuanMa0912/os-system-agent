@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.request
 
 try:
@@ -292,6 +293,113 @@ def _quality_stats(config, table: str, partition_field: str,
         conn.close()
 
 
+# --- sonda al ORIGEN (ERP) --------------------------------------------------
+# Los tres pipelines leen la MISMA tabla del ERP, asi que una sola sonda sirve
+# para los tres. Reapuntable por config (``report.source_check.*``) sin tocar codigo.
+_SOURCE_TABLE_DEFAULT = "CMMOVIMIENTO_PDV"
+_SOURCE_DATE_COL_DEFAULT = "FECHA_DCTO"
+_SOURCE_SEDE_COL_DEFAULT = "ID_CO"
+# Dias que una sede puede pasar sin postear antes de avisar. 2 tolera el cierre
+# dominical (brecha=1) sin ruido; un festivo largo puede dar un aviso benigno,
+# que se prefiere a no ver una tienda apagada durante dias.
+_SEDE_SILENT_DAYS_DEFAULT = 2
+# Ventana hacia atras para medir la ultima venta por sede: acota el costo contra
+# una tabla de millones de filas.
+_SEDE_LOOKBACK_DAYS = 30
+# Los identificadores se interpolan en SQL (no pueden ir como parametros), asi que
+# se validan al leerlos del config y se falla cerrado.
+_SAFE_IDENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _range_days(start_date: str, end_date: str) -> list[str]:
+    """Todos los YYYYMMDD del rango, inclusive. [] si no parsean."""
+    from datetime import datetime, timedelta
+    try:
+        a = datetime.strptime(start_date, "%Y%m%d").date()
+        b = datetime.strptime(end_date, "%Y%m%d").date()
+    except Exception:  # noqa: BLE001
+        return []
+    return [] if b < a else [(a + timedelta(days=i)).strftime("%Y%m%d")
+                             for i in range((b - a).days + 1)]
+
+
+def _shift_days(day: str, delta: int) -> str:
+    """YYYYMMDD desplazado ``delta`` dias. Devuelve el original si no parsea."""
+    from datetime import datetime, timedelta
+    try:
+        d = datetime.strptime(day, "%Y%m%d").date()
+    except Exception:  # noqa: BLE001
+        return day
+    return (d + timedelta(days=delta)).strftime("%Y%m%d")
+
+
+def _days_between(a: str, b: str):
+    """Dias de ``a`` hasta ``b``. None si alguno no parsea."""
+    from datetime import datetime
+    try:
+        return (datetime.strptime(b, "%Y%m%d").date()
+                - datetime.strptime(a, "%Y%m%d").date()).days
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _source_stats(config, start_date: str, end_date: str) -> dict:
+    """Cuenta en el ORIGEN (ERP) lo que el ETL deberia haber traido. Falla-suave.
+
+    Responde la pregunta que el destino NO puede responder solo: cuando GCP queda
+    en cero, ¿fallo la carga, o el ORIGEN nunca tuvo el dia? El 2026-08-12 esa
+    ambiguedad costo media jornada de diagnostico — el 7 y el 10 de agosto tenian
+    CERO filas en el ERP (no habia nada que traer, recargar era inutil) mientras
+    que el 8 tenia 38.480 (carga perdida, si recuperable). En el reporte los tres
+    se veian identicos: ``Filas cargadas: 0`` y palomita verde.
+
+    Devuelve ``{"dias": {yyyymmdd: filas}, "faltan": [...], "sedes": [...]}``
+    o ``{}`` si no se pudo consultar. Solo lectura.
+    """
+    try:
+        from common.db import build_source  # perezoso: sin ERP configurado, no-op
+        src = build_source(config)
+    except Exception:  # noqa: BLE001
+        return {}
+
+    tbl = str(config.get("report.source_check.table", _SOURCE_TABLE_DEFAULT) or "")
+    dcol = str(config.get("report.source_check.date_column", _SOURCE_DATE_COL_DEFAULT) or "")
+    scol = str(config.get("report.source_check.sede_column", _SOURCE_SEDE_COL_DEFAULT) or "")
+    if not all(_SAFE_IDENT.match(x) for x in (tbl, dcol, scol)):
+        return {}
+
+    out: dict = {}
+    try:
+        # La columna va DESNUDA en el WHERE. Envolverla en TRIM() la vuelve
+        # no-sargable, mata el indice de fecha y convierte una sonda barata en un
+        # scan de millones de filas. El TRIM va del lado del resultado, en Python.
+        rows = src.fetch_all(
+            f"SELECT {dcol} AS dia, COUNT(*) AS filas FROM {tbl} "
+            f"WHERE {dcol} BETWEEN %s AND %s GROUP BY {dcol}",
+            (start_date, end_date))
+        dias = {str(r["dia"]).strip(): int(r["filas"] or 0) for r in rows}
+        out["dias"] = dias
+        out["faltan"] = [d for d in _range_days(start_date, end_date) if not dias.get(d)]
+
+        # Ultima venta POR SEDE. El 2026-08-12 se descubrio que la sede 002 (39%
+        # del volumen) llevaba CUATRO dias sin postear una sola fila y ningun
+        # reporte lo dijo: el total diario seguia pareciendo normal porque la 001
+        # lo sostenia. Una tienda entera puede apagarse y el agregado no se entera.
+        sedes = src.fetch_all(
+            f"SELECT {scol} AS sede, MAX({dcol}) AS ultima FROM {tbl} "
+            f"WHERE {dcol} >= %s GROUP BY {scol} ORDER BY 1",
+            (_shift_days(end_date, -_SEDE_LOOKBACK_DAYS),))
+        out["sedes"] = [
+            {"sede": str(r["sede"]).strip(),
+             "ultima": str(r["ultima"]).strip(),
+             "dias_sin": _days_between(str(r["ultima"]).strip(), end_date)}
+            for r in sedes if str(r["sede"] or "").strip()
+        ]
+        return out
+    except Exception:  # noqa: BLE001 — el health-check nunca rompe la corrida
+        return out
+
+
 def _money(v) -> str:
     """1469196965.0 -> '1.469.196.965' (separador de miles con punto)."""
     try:
@@ -342,12 +450,36 @@ def report_run(config, *, table: str, partition_field: str, mode: str,
     rows_range, last, total = _range_stats(config, table, partition_field,
                                             start_date, end_date)
 
+    # --- sonda al ORIGEN: separar "no llegó" de "nunca existió" --------------
+    src = _source_stats(config, start_date, end_date)
+    src_dias = src.get("dias")
+    src_rows = sum(src_dias.values()) if src_dias is not None else None
+    src_faltan = src.get("faltan") or []
+    src_sedes = src.get("sedes") or []
+    silent = int(config.get("report.source_check.sede_silent_days",
+                            _SEDE_SILENT_DAYS_DEFAULT) or _SEDE_SILENT_DAYS_DEFAULT)
+
     # --- señales de alerta ---------------------------------------------------
     warnings: list[str] = []
     if not ok:
         warnings.append("la carga NO terminó bien — revisar journalctl")
     if ok and rows_range == 0:
-        warnings.append(f"SIN datos para {start_date}..{end_date} (¿el ERP aún no cargó?)")
+        # Estas tres situaciones se veían idénticas antes del 2026-08-12, y llevan
+        # a acciones OPUESTAS: recargar, no recargar, o revisar el ERP.
+        if src_rows is None:
+            warnings.append(f"SIN datos para {start_date}..{end_date} "
+                            "(y no pude consultar el ERP para saber por qué)")
+        elif src_rows == 0:
+            warnings.append(f"el ORIGEN no tiene {start_date}..{end_date} — no hay nada "
+                            "que traer; recargar NO sirve, revisar el POS/ERP")
+        else:
+            warnings.append(f"CARGA PERDIDA: el ERP tiene {src_rows} filas de "
+                            f"{start_date}..{end_date} y GCP quedó en 0 — re-correr")
+    # Una tienda apagada no mueve el total del día si la otra lo sostiene.
+    for x in src_sedes:
+        n = x.get("dias_sin")
+        if n is not None and n >= silent:
+            warnings.append(f"sede {x['sede']} SIN movimiento desde {x['ultima']} ({n}d)")
     stale = bool(ok and last and last < end_date)
     if stale:
         warnings.append(f"ATRASO: última en GCP {last} < esperada {end_date}")
@@ -396,6 +528,19 @@ def report_run(config, *, table: str, partition_field: str, mode: str,
         f"Filas cargadas (rango): {rows_range if rows_range is not None else '¿?'}",
         f"Última fecha en GCP: {last or '¿?'}{fresh_mark}",
     ]
+    # Origen justo debajo del destino: los dos números pegados hacen obvio si el
+    # hueco lo puso el ETL o venía del ERP, sin que nadie tenga que ir a mirar.
+    if src_rows is not None:
+        det = ""
+        if src_faltan:
+            muestra = ", ".join(src_faltan[:5]) + ("…" if len(src_faltan) > 5 else "")
+            det = f"  ⚠️ sin movimiento en el ERP: {muestra}"
+        lines.append(f"Origen (ERP): {src_rows} filas{det}")
+    if src_sedes:
+        partes = [f"{x['sede']}→{x['ultima']} "
+                  f"{'✅' if (x.get('dias_sin') is not None and x['dias_sin'] < silent) else '⚠️'}"
+                  for x in src_sedes]
+        lines.append("Sedes (ERP): " + " · ".join(partes))
     # Responder "¿cargó ayer?" sin que nadie tenga que deducirlo de una fecha.
     if yday and yrows is not None:
         lines.append(f"Ayer ({yday}): {yrows} filas  "
