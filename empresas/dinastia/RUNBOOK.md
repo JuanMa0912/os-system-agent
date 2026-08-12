@@ -7,7 +7,16 @@ Guía rápida paso a paso para operar los 3 ETLs de Dinastia en el box
 > **Rutas:** `/opt/dinastia-ventas`, `/opt/dinastia-margen`, `/opt/dinastia-rotacion`
 > **Secretos:** `/etc/dinastia/dinastia.env` (ERP + GCP + Telegram cortana)
 > **Usuario de producción:** `osagent`
-> **Historia disponible:** el ERP arranca el **2026-06-14** (no hay datos antes).
+> **Historia disponible:** el ERP tiene `CMMOVIMIENTO_PDV` desde el **2025-01-02**
+> y `CMRESUMEN_INVENTARIO` desde el lapso **202401**. GCP solo tiene desde
+> mediados de junio 2026, así que hay ~19 meses cargables (verificado el
+> 2026-08-12 con `MIN/MAX(FECHA_DCTO)`).
+>
+> ⚠️ Esta línea decía antes "el ERP arranca el 2026-06-14 (no hay datos antes)".
+> **Era falso**, y esa frase fue la que sostuvo la decisión de no cargar historia.
+> De enero a mayo de 2026 hay ~$41.000 millones de venta que el tablero nunca vio,
+> más todo 2025. **La sede 002 abrió en junio de 2026**: hasta mayo el ERP tiene
+> una sola sede, lo que explica por qué no se puede comparar año contra año.
 
 ---
 
