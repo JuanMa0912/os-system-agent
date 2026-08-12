@@ -303,6 +303,12 @@ _SOURCE_SEDE_COL_DEFAULT = "ID_CO"
 # dominical (brecha=1) sin ruido; un festivo largo puede dar un aviso benigno,
 # que se prefiere a no ver una tienda apagada durante dias.
 _SEDE_SILENT_DAYS_DEFAULT = 2
+# Sedes de VENTA que se vigilan. El maestro trae ademas 003 CAMION 2,
+# U01 ADMINISTRATIVO, XXX C.O PARA CIERRE y una en blanco: esas postean de vez en
+# cuando, asi que alertar por ellas dejaria el reporte en ⚠️ permanente durante 30
+# dias — el encabezado dejaria de significar algo justo cuando mas hace falta. Se
+# MUESTRAN en la linea de sedes con un punto neutro, pero no disparan aviso.
+_SEDES_WATCH_DEFAULT = ("001", "002")
 # Ventana hacia atras para medir la ultima venta por sede: acota el costo contra
 # una tabla de millones de filas.
 _SEDE_LOOKBACK_DAYS = 30
@@ -377,7 +383,15 @@ def _source_stats(config, start_date: str, end_date: str) -> dict:
             f"SELECT {dcol} AS dia, COUNT(*) AS filas FROM {tbl} "
             f"WHERE {dcol} BETWEEN %s AND %s GROUP BY {dcol}",
             (start_date, end_date))
-        dias = {str(r["dia"]).strip(): int(r["filas"] or 0) for r in rows}
+        # _norm_yyyymmdd, no str(): la columna es texto HOY, pero la sonda es
+        # reapuntable por config y un tipo date daria '2026-08-10', que no casa
+        # con ninguna clave YYYYMMDD -> "sin movimiento" en TODOS los dias, en la
+        # misma linea que dice que hay 38.480 filas.
+        dias = {}
+        for r in rows:
+            k = _norm_yyyymmdd(r["dia"])
+            if k:
+                dias[k] = int(r["filas"] or 0)
         out["dias"] = dias
         out["faltan"] = [d for d in _range_days(start_date, end_date) if not dias.get(d)]
 
@@ -389,12 +403,14 @@ def _source_stats(config, start_date: str, end_date: str) -> dict:
             f"SELECT {scol} AS sede, MAX({dcol}) AS ultima FROM {tbl} "
             f"WHERE {dcol} >= %s GROUP BY {scol} ORDER BY 1",
             (_shift_days(end_date, -_SEDE_LOOKBACK_DAYS),))
-        out["sedes"] = [
-            {"sede": str(r["sede"]).strip(),
-             "ultima": str(r["ultima"]).strip(),
-             "dias_sin": _days_between(str(r["ultima"]).strip(), end_date)}
-            for r in sedes if str(r["sede"] or "").strip()
-        ]
+        out["sedes"] = []
+        for r in sedes:
+            sede = str(r["sede"] or "").strip()
+            ultima = _norm_yyyymmdd(r["ultima"])
+            if not sede or not ultima:
+                continue
+            out["sedes"].append({"sede": sede, "ultima": ultima,
+                                 "dias_sin": _days_between(ultima, end_date)})
         return out
     except Exception:  # noqa: BLE001 — el health-check nunca rompe la corrida
         return out
@@ -455,9 +471,19 @@ def report_run(config, *, table: str, partition_field: str, mode: str,
     src_dias = src.get("dias")
     src_rows = sum(src_dias.values()) if src_dias is not None else None
     src_faltan = src.get("faltan") or []
-    src_sedes = src.get("sedes") or []
-    silent = int(config.get("report.source_check.sede_silent_days",
-                            _SEDE_SILENT_DAYS_DEFAULT) or _SEDE_SILENT_DAYS_DEFAULT)
+    src_sedes = src.get("sedes")          # None = no se pudo consultar el ERP
+    # Un typo en el YAML no puede tumbar el reporte: este bloque era la UNICA
+    # excepcion sin atrapar del modulo, y el caller la traga sin enviar nada.
+    try:
+        silent = int(config.get("report.source_check.sede_silent_days",
+                                _SEDE_SILENT_DAYS_DEFAULT))
+    except (TypeError, ValueError):
+        silent = _SEDE_SILENT_DAYS_DEFAULT
+    try:
+        watch = {str(s).strip() for s in
+                 (config.get("report.source_check.sedes", _SEDES_WATCH_DEFAULT) or ())}
+    except TypeError:
+        watch = set(_SEDES_WATCH_DEFAULT)
 
     # --- señales de alerta ---------------------------------------------------
     warnings: list[str] = []
@@ -473,13 +499,29 @@ def report_run(config, *, table: str, partition_field: str, mode: str,
             warnings.append(f"el ORIGEN no tiene {start_date}..{end_date} — no hay nada "
                             "que traer; recargar NO sirve, revisar el POS/ERP")
         else:
-            warnings.append(f"CARGA PERDIDA: el ERP tiene {src_rows} filas de "
-                            f"{start_date}..{end_date} y GCP quedó en 0 — re-correr")
+            # "crudas" a propósito: la sonda cuenta la tabla tal cual, mientras el
+            # ETL excluye Z%, exige JOIN con ITEMS y agrupa. Los dos números NO son
+            # comparables, así que se afirma lo único cierto — que el origen SÍ
+            # tenía filas — y se deja el veredicto al operador.
+            warnings.append(f"el ERP SÍ tiene {src_rows} filas crudas de "
+                            f"{start_date}..{end_date} y GCP quedó en 0 "
+                            "— revisar la corrida (¿carga perdida?)")
+
     # Una tienda apagada no mueve el total del día si la otra lo sostiene.
-    for x in src_sedes:
+    vistas = {x["sede"] for x in (src_sedes or [])}
+    for x in (src_sedes or []):
+        if watch and x["sede"] not in watch:
+            continue          # camión / administrativo / C.O de cierre: no alertan
         n = x.get("dias_sin")
         if n is not None and n >= silent:
             warnings.append(f"sede {x['sede']} SIN movimiento desde {x['ultima']} ({n}d)")
+    # Falla CERRADO: una sede muda más días que la ventana no vuelve en la consulta.
+    # Sin esto desaparecía de la línea, no generaba aviso y el encabezado volvía a
+    # ✅ — o sea que el caso GRAVE era justo el que se callaba.
+    if src_sedes is not None:
+        for s in sorted(watch - vistas):
+            warnings.append(f"sede {s} SIN movimiento en {_SEDE_LOOKBACK_DAYS} días "
+                            "— ¿tienda caída?")
     stale = bool(ok and last and last < end_date)
     if stale:
         warnings.append(f"ATRASO: última en GCP {last} < esperada {end_date}")
@@ -535,11 +577,20 @@ def report_run(config, *, table: str, partition_field: str, mode: str,
         if src_faltan:
             muestra = ", ".join(src_faltan[:5]) + ("…" if len(src_faltan) > 5 else "")
             det = f"  ⚠️ sin movimiento en el ERP: {muestra}"
-        lines.append(f"Origen (ERP): {src_rows} filas{det}")
+        lines.append(f"Origen (ERP, crudo): {src_rows} filas{det}")
     if src_sedes:
-        partes = [f"{x['sede']}→{x['ultima']} "
-                  f"{'✅' if (x.get('dias_sin') is not None and x['dias_sin'] < silent) else '⚠️'}"
-                  for x in src_sedes]
+        partes = []
+        for x in src_sedes:
+            n = x.get("dias_sin")
+            if watch and x["sede"] not in watch:
+                icono = "·"       # se muestra para dar contexto, no opina
+            elif n is not None and n < silent:
+                icono = "✅"
+            else:
+                icono = "⚠️"
+            partes.append(f"{x['sede']}→{x['ultima']} {icono}")
+        for s in sorted(watch - vistas):
+            partes.append(f"{s}→(sin datos) ⚠️")
         lines.append("Sedes (ERP): " + " · ".join(partes))
     # Responder "¿cargó ayer?" sin que nadie tenga que deducirlo de una fecha.
     if yday and yrows is not None:
