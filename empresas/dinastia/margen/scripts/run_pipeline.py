@@ -40,10 +40,28 @@ WEEKLY_DAYS = 8
 LOG = get_module_logger(f"run_pipeline_{PIPELINE}")
 
 
-def _range_for_mode(mode: str, tz) -> tuple[str, str]:
+# Dias que el daily arrastra hacia atras ademas de ayer. NO es paranoia: la sede
+# 002 postea al ERP con 2-3 dias de retraso (medido el 2026-08-14 — el 11 y el 12
+# entraron a GCP con la 001 solamente, $625M sin cargar). Cargando solo D-1 esos
+# dias quedan a medias y nadie los vuelve a mirar hasta el weekly del sabado, o
+# sea hasta 7 dias despues. Con la ventana, el daily del dia siguiente los recoge
+# solo. Sobre-escribir un dia ya completo es inofensivo: la fuente es la misma.
+DAILY_LOOKBACK_DEFAULT = 4
+
+
+def _range_for_mode(mode: str, config) -> tuple[str, str]:
+    tz = config.timezone
     if mode == "daily":
         day = get_yesterday_yyyymmdd(tz)
-        return day, day
+        try:
+            back = int(config.get("source.daily_lookback_days", DAILY_LOOKBACK_DEFAULT))
+        except (TypeError, ValueError):
+            back = DAILY_LOOKBACK_DEFAULT
+        back = max(0, back)
+        if not back:
+            return day, day
+        start = datetime.strptime(day, "%Y%m%d").date() - timedelta(days=back)
+        return start.strftime("%Y%m%d"), day
     if mode == "monthly":
         return get_month_range_yyyymmdd(tz)
     # weekly: ultimos WEEKLY_DAYS dias hasta ayer
@@ -85,7 +103,7 @@ def main() -> int:
         end_date = validate_yyyymmdd(args.end_date)
         label = "range"
     elif args.mode:
-        start_date, end_date = _range_for_mode(args.mode, config.timezone)
+        start_date, end_date = _range_for_mode(args.mode, config)
         label = args.mode
     else:
         print("ERROR: pasa --mode daily|weekly|monthly, o --start-date/--end-date, "
