@@ -75,15 +75,51 @@ def _norm_yyyymmdd(v):
     return s.replace("-", "")[:8] if "-" in s else s[:8]
 
 
+def _matviews_dependientes(cur, table: str) -> list[str]:
+    """Vistas materializadas que LEEN ``table``, descubiertas del catálogo.
+
+    Existen para cerrar un eslabón roto y silencioso: la cadena de rotación es
+    ``rotacion_dinastia`` (la carga el ETL) -> matview
+    ``rotacion_dinastia_item_dia_clean`` -> función
+    ``refresh_rotacion_dinastia_item_periodo_std()``. La función **consume** la
+    matview, no la refresca; y si la encuentra vacía hace ``RAISE NOTICE`` y se
+    salta el trabajo **sin fallar**. O sea que el ETL cargaba la tabla base,
+    reportaba ``Refresco ✅`` y el rollup se armaba con datos viejos.
+
+    Descubrirlas del catálogo en vez de declararlas evita dos cosas: que el orden
+    quede mal (la matview SIEMPRE va antes que la función que la lee) y que una
+    matview nueva nazca huérfana porque nadie se acordó de tocar el YAML.
+    """
+    try:
+        cur.execute(
+            """SELECT DISTINCT mv.relname
+                 FROM pg_depend d
+                 JOIN pg_rewrite r  ON r.oid = d.objid
+                 JOIN pg_class  mv  ON mv.oid = r.ev_class AND mv.relkind = 'm'
+                 JOIN pg_class  base ON base.oid = d.refobjid
+                WHERE base.relname = %s AND mv.relname <> base.relname
+                ORDER BY 1""",
+            (str(table).split(".")[-1],))
+        return [r[0] for r in cur.fetchall()]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def refresh_materialized_views(config, logger=None, *, start_date=None,
-                               end_date=None) -> list[dict]:
+                               end_date=None, table=None) -> list[dict]:
     """Refresca las vistas/funciones de ``refresh_views``.
+
+    Antes de las declaradas refresca las matviews que **dependen de la tabla
+    cargada**, descubiertas del catálogo. El orden no es cosmético: las funciones
+    de rollup LEEN esas matviews, así que refrescarlas después las dejaría
+    construyendo con datos viejos.
 
     Devuelve ``[{"view", "status", "detail"}]`` para que el reporte informe si
     refresco. ``status`` in {incremental, full, matview, failed, skipped}.
     """
     views = config.get("target.cloudsql_postgres.refresh_views", []) or []
-    if not views:
+    auto = config.get("target.cloudsql_postgres.refresh_dependent_matviews", True)
+    if not views and not (auto and table):
         return []
     conn = _pg_connect(config)
     if conn is None:
@@ -96,6 +132,30 @@ def refresh_materialized_views(config, logger=None, *, start_date=None,
     try:
         conn.autocommit = True
         cur = conn.cursor()
+
+        if auto and table:
+            declaradas = {v.split(".")[-1] for v in views}
+            for mv in _matviews_dependientes(cur, table):
+                if mv in declaradas:
+                    continue      # ya viene en refresh_views; se respeta ese orden
+                try:
+                    # CONCURRENTLY no bloquea a quien esté leyendo, pero exige un
+                    # índice único. Si no lo hay, se cae al modo que sí bloquea.
+                    try:
+                        cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {mv}")
+                        detalle = "dependiente, concurrently"
+                    except Exception:
+                        cur.execute(f"REFRESH MATERIALIZED VIEW {mv}")
+                        detalle = "dependiente"
+                    results.append({"view": mv, "status": "matview", "detail": detalle})
+                    if logger:
+                        logger.info("Matview dependiente refrescada: %s (%s)", mv, detalle)
+                except Exception as exc:  # noqa: BLE001
+                    results.append({"view": mv, "status": "failed",
+                                    "detail": str(exc).splitlines()[0][:200]})
+                    if logger:
+                        logger.warning("No se pudo refrescar la matview %s: %s", mv, exc)
+
         for view in views:
             name = view.split(".")[-1]
             try:

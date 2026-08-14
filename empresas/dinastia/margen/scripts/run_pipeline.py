@@ -91,7 +91,7 @@ def main() -> int:
     # --refresh-only: solo refresca (útil tras un backfill con el ETL directo).
     if args.refresh_only:
         LOG.info("[refresh-only] refrescando vistas/funciones de %s ...", table)
-        refresh_materialized_views(config, LOG)
+        refresh_materialized_views(config, LOG, table=table)
         return 0
 
     # Rango: explícito (--start-date/--end-date) o por --mode.
@@ -120,7 +120,8 @@ def main() -> int:
         refresh_result = []
         try:
             refresh_result = refresh_materialized_views(
-                config, LOG, start_date=start_date, end_date=end_date)
+                config, LOG, start_date=start_date, end_date=end_date,
+                table=table)
         except Exception as exc:  # noqa: BLE001
             LOG.warning("refresco de vistas falló: %s", exc)
         try:
