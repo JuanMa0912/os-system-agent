@@ -75,15 +75,51 @@ def _norm_yyyymmdd(v):
     return s.replace("-", "")[:8] if "-" in s else s[:8]
 
 
+def _matviews_dependientes(cur, table: str) -> list[str]:
+    """Vistas materializadas que LEEN ``table``, descubiertas del catálogo.
+
+    Existen para cerrar un eslabón roto y silencioso: la cadena de rotación es
+    ``rotacion_dinastia`` (la carga el ETL) -> matview
+    ``rotacion_dinastia_item_dia_clean`` -> función
+    ``refresh_rotacion_dinastia_item_periodo_std()``. La función **consume** la
+    matview, no la refresca; y si la encuentra vacía hace ``RAISE NOTICE`` y se
+    salta el trabajo **sin fallar**. O sea que el ETL cargaba la tabla base,
+    reportaba ``Refresco ✅`` y el rollup se armaba con datos viejos.
+
+    Descubrirlas del catálogo en vez de declararlas evita dos cosas: que el orden
+    quede mal (la matview SIEMPRE va antes que la función que la lee) y que una
+    matview nueva nazca huérfana porque nadie se acordó de tocar el YAML.
+    """
+    try:
+        cur.execute(
+            """SELECT DISTINCT mv.relname
+                 FROM pg_depend d
+                 JOIN pg_rewrite r  ON r.oid = d.objid
+                 JOIN pg_class  mv  ON mv.oid = r.ev_class AND mv.relkind = 'm'
+                 JOIN pg_class  base ON base.oid = d.refobjid
+                WHERE base.relname = %s AND mv.relname <> base.relname
+                ORDER BY 1""",
+            (str(table).split(".")[-1],))
+        return [r[0] for r in cur.fetchall()]
+    except Exception:  # noqa: BLE001
+        return []
+
+
 def refresh_materialized_views(config, logger=None, *, start_date=None,
-                               end_date=None) -> list[dict]:
+                               end_date=None, table=None) -> list[dict]:
     """Refresca las vistas/funciones de ``refresh_views``.
+
+    Antes de las declaradas refresca las matviews que **dependen de la tabla
+    cargada**, descubiertas del catálogo. El orden no es cosmético: las funciones
+    de rollup LEEN esas matviews, así que refrescarlas después las dejaría
+    construyendo con datos viejos.
 
     Devuelve ``[{"view", "status", "detail"}]`` para que el reporte informe si
     refresco. ``status`` in {incremental, full, matview, failed, skipped}.
     """
     views = config.get("target.cloudsql_postgres.refresh_views", []) or []
-    if not views:
+    auto = config.get("target.cloudsql_postgres.refresh_dependent_matviews", True)
+    if not views and not (auto and table):
         return []
     conn = _pg_connect(config)
     if conn is None:
@@ -96,6 +132,30 @@ def refresh_materialized_views(config, logger=None, *, start_date=None,
     try:
         conn.autocommit = True
         cur = conn.cursor()
+
+        if auto and table:
+            declaradas = {v.split(".")[-1] for v in views}
+            for mv in _matviews_dependientes(cur, table):
+                if mv in declaradas:
+                    continue      # ya viene en refresh_views; se respeta ese orden
+                try:
+                    # CONCURRENTLY no bloquea a quien esté leyendo, pero exige un
+                    # índice único. Si no lo hay, se cae al modo que sí bloquea.
+                    try:
+                        cur.execute(f"REFRESH MATERIALIZED VIEW CONCURRENTLY {mv}")
+                        detalle = "dependiente, concurrently"
+                    except Exception:
+                        cur.execute(f"REFRESH MATERIALIZED VIEW {mv}")
+                        detalle = "dependiente"
+                    results.append({"view": mv, "status": "matview", "detail": detalle})
+                    if logger:
+                        logger.info("Matview dependiente refrescada: %s (%s)", mv, detalle)
+                except Exception as exc:  # noqa: BLE001
+                    results.append({"view": mv, "status": "failed",
+                                    "detail": str(exc).splitlines()[0][:200]})
+                    if logger:
+                        logger.warning("No se pudo refrescar la matview %s: %s", mv, exc)
+
         for view in views:
             name = view.split(".")[-1]
             try:
@@ -411,9 +471,76 @@ def _source_stats(config, start_date: str, end_date: str) -> dict:
                 continue
             out["sedes"].append({"sede": sede, "ultima": ultima,
                                  "dias_sin": _days_between(ultima, end_date)})
+
+        # Que sedes tuvo el ORIGEN cada dia del rango. Es lo que permite decir
+        # "el ERP tiene dos sedes el 11 y GCP solo una" — el caso que el control
+        # de volumen dejo pasar el 2026-08-14 con un inofensivo 86%.
+        por_dia = src.fetch_all(
+            f"SELECT {dcol} AS dia, {scol} AS sede FROM {tbl} "
+            f"WHERE {dcol} BETWEEN %s AND %s GROUP BY {dcol}, {scol}",
+            (start_date, end_date))
+        mapa: dict = {}
+        for r in por_dia:
+            d = _norm_yyyymmdd(r["dia"])
+            s = str(r["sede"] or "").strip()
+            if d and s:
+                mapa.setdefault(d, set()).add(s)
+        out["sedes_por_dia"] = mapa
         return out
     except Exception:  # noqa: BLE001 — el health-check nunca rompe la corrida
         return out
+
+
+# Nombre de la columna de sede en el destino, por orden de preferencia: margen usa
+# id_co, ventas centro_operacion, rotacion sede. Se detecta, no se declara, porque
+# las tres tablas ya existen y renombrarlas no esta sobre la mesa.
+_DEST_SEDE_CANDIDATES = ("id_co", "centro_operacion", "sede")
+
+
+def _dest_sedes_por_dia(config, table: str, partition_field: str,
+                        start_date: str, end_date: str) -> dict:
+    """Que sedes quedaron cargadas cada dia en el DESTINO. {} si algo falla.
+
+    Se compara contra ``sedes_por_dia`` del origen. No sirve comparar CONTEOS
+    (ventas agrega con GROUP BY, rotacion es una rejilla), pero la PRESENCIA de
+    la sede es comparable en las tres tablas.
+    """
+    conn = _pg_connect(config)
+    if conn is None:
+        return {}
+    try:
+        cur = conn.cursor()
+        tbl = table.split(".")[-1]
+        cur.execute("SELECT column_name FROM information_schema.columns "
+                    "WHERE table_name = %s AND column_name = ANY(%s)",
+                    (tbl, list(_DEST_SEDE_CANDIDATES)))
+        hay = {r[0] for r in cur.fetchall()}
+        scol = next((c for c in _DEST_SEDE_CANDIDATES if c in hay), None)
+        if not scol:
+            return {}
+        cur.execute("SELECT data_type FROM information_schema.columns "
+                    "WHERE table_name = %s AND column_name = %s LIMIT 1",
+                    (tbl, partition_field))
+        r = cur.fetchone()
+        tipo = (r[0] if r else "") or ""
+        is_date = "date" in tipo or "timestamp" in tipo
+        col = f'"{partition_field}"'
+        where = f"{col} BETWEEN %s AND %s" if is_date else f"{col}::text BETWEEN %s AND %s"
+        rng = (_iso(start_date), _iso(end_date)) if is_date else (start_date, end_date)
+        cur.execute(f'SELECT {col}::text, "{scol}" FROM {table} WHERE {where} '
+                    f'GROUP BY 1, 2', rng)
+        mapa: dict = {}
+        for d, s in cur.fetchall():
+            d = _norm_yyyymmdd(d)
+            s = str(s or "").strip()
+            if d and s:
+                mapa.setdefault(d, set()).add(s)
+        cur.close()
+        return mapa
+    except Exception:  # noqa: BLE001 — el health-check nunca rompe la corrida
+        return {}
+    finally:
+        conn.close()
 
 
 def _money(v) -> str:
@@ -515,6 +642,27 @@ def report_run(config, *, table: str, partition_field: str, mode: str,
         n = x.get("dias_sin")
         if n is not None and n >= silent:
             warnings.append(f"sede {x['sede']} SIN movimiento desde {x['ultima']} ({n}d)")
+    # SEDE FALTANTE POR DIA — la señal que el volumen no ve. El 2026-08-11 cargó
+    # 6.259 filas contra ~7.301 de mediana: 86%, muy por encima del umbral, y le
+    # faltaba la sede 002 ENTERA ($294,8M). Comparar presencia de sede es exacto
+    # donde comparar conteos no lo es (ventas agrega, rotación es una rejilla).
+    faltan_sede: list[str] = []
+    origen_ds = src.get("sedes_por_dia") or {}
+    if ok and origen_ds:
+        destino_ds = _dest_sedes_por_dia(config, table, partition_field,
+                                         start_date, end_date)
+        if destino_ds:
+            for dia in sorted(origen_ds):
+                falta = origen_ds[dia] - destino_ds.get(dia, set())
+                if watch:
+                    falta &= watch      # el camión y el administrativo no cuentan
+                if falta:
+                    faltan_sede.append(f"{dia}: falta {','.join(sorted(falta))}")
+    if faltan_sede:
+        warnings.append("SEDE SIN CARGAR — " + " · ".join(faltan_sede[:6])
+                        + (" …" if len(faltan_sede) > 6 else "")
+                        + " (el ERP la tiene y GCP no; re-correr ese rango)")
+
     # Falla CERRADO: una sede muda más días que la ventana no vuelve en la consulta.
     # Sin esto desaparecía de la línea, no generaba aviso y el encabezado volvía a
     # ✅ — o sea que el caso GRAVE era justo el que se callaba.
