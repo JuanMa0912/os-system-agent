@@ -1,9 +1,29 @@
-# Spec 006 — El agente responde preguntas de negocio contra GCP
+# Spec 006 — El agente responde preguntas de negocio
 
-> Estado: **borrador para aprobación**. Diseñada a partir de un reconocimiento de 5 agentes
-> sobre el código real, un panel de 3 arquitecturas independientes y dos críticos
-> adversariales. El expediente completo está en `_diseno-sintesis.md`,
-> `_critica-seguridad.md` y `_critica-completitud.md` de esta misma carpeta.
+> ## ⚠️ EN REESCRITURA — esta versión parte de una premisa FALSA
+>
+> Este borrador asume que el agente lee **Cloud SQL** con un rol `os_agent_ro` y vistas
+> `agente_ro.v_*`. Esa premisa **no se sostiene**: el operador confirmó que el server 232
+> **no tiene acceso a Cloud SQL**. La receta de `scripts/etl/README-sync.md` («autorizar la
+> IP de salida del server») describe un requisito de instalación, no el estado real, y yo la
+> leí como si lo fuera.
+>
+> **La arquitectura acordada es otra:** el agente **no tendrá credenciales de base de datos**.
+> Consumirá por HTTPS la **API del portal** (~70 endpoints que ya calculan las respuestas),
+> autenticado como un usuario dedicado de solo lectura. Sin credencial de BD no hay nada que
+> el agente pueda borrar, que es el requisito de fondo.
+>
+> **Qué sigue siendo válido de este documento:** §1 (problema), §2 (actores), §3 (journeys),
+> §4 RF-01 y RF-03 a RF-09, §5, §7 CA-05 a CA-09, §8 y §9.
+> **Qué queda obsoleto:** §4 RF-02 (compilador de SQL), §6 completo (frontera de base de datos)
+> y §7 CA-01 a CA-04 (pruebas del rol de Postgres).
+>
+> **§6.1 no es obsoleto y no debe perderse:** el hallazgo de las funciones `refresh_*` es real
+> y verificado, y sigue siendo un riesgo para quien administre esa base — solo que ya no es
+> un riesgo *del agente*, porque el agente no se conectará a la base.
+>
+> El expediente del análisis está en `_diseno-sintesis.md`, `_critica-seguridad.md` y
+> `_critica-completitud.md` de esta misma carpeta.
 
 ## 1. Problema
 
