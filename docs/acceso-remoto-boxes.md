@@ -70,8 +70,9 @@ Start-Service sshd
 El instalador crea una regla abierta a cualquier origen. Ciérrala a tu subred:
 
 ```powershell
+# <SUBRED_LAN> = la subred de tu oficina en notacion CIDR, p.ej. 203.0.113.0/24
 Set-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' `
-  -RemoteAddress 192.168.80.0/24 -Enabled True
+  -RemoteAddress <SUBRED_LAN> -Enabled True
 Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' |
   Get-NetFirewallAddressFilter | Select-Object RemoteAddress   # verificar
 ```
