@@ -1,9 +1,19 @@
 # Secrets & credentials
+# `.env.*` con excepcion explicita: el patron literal `.env` no cubria variantes
+# como `.env.etl` (el nombre que usa el deploy del visor), `.env.prod` o
+# `.env.232`, y cualquiera de esas habria entrado al repo sin avisar.
 .env
-.env.local
+.env.*
+!.env.example
 *.pem
 *.key
 *.ppk
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+*credentials*.json
+*service-account*.json
 
 # Logs & local data
 *.log
