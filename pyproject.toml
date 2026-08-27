@@ -70,6 +70,11 @@ select = ["E", "F", "I", "UP", "B", "S", "W"]
 # Invokes the fixed `openclaw` CLI (no shell) and the fixed Telegram HTTPS API
 # (urlopen against a constant https host) to deliver notifications.
 "src/os_system_agent/notify.py" = ["S603", "S607", "S310"]
+# S105 marca "posible contrasena embebida" al ver palabras como `password` o
+# `secret` en una constante. Aqui es lo contrario de un hallazgo: este modulo ES
+# el redactor, y esas palabras son el patron que BUSCA credenciales para taparlas.
+# No hay ningun valor secreto en el archivo, solo nombres de campo.
+"src/os_system_agent/redaction.py" = ["S105"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -15,11 +15,41 @@
 # motivo, pero NUNCA el valor completo de lo que encontro.
 set -euo pipefail
 
+# --self-test: comprueba que el guardia DE VERDAD detecta algo antes de que se
+# confie en su "limpio". El modo de fallo peligroso de un escaner no es dar un
+# falso positivo, es pasar en verde sin haber mirado. La sonda vive aqui y no en
+# el workflow para que el YAML del CI no tenga que llevar una IP privada dentro.
+if [ "${1:-}" = "--self-test" ]; then
+  SONDA_DIR="docs/_leak_guard_probe"
+  mkdir -p "$SONDA_DIR"
+  printf 'host 10.1.2.3\n' > "$SONDA_DIR/sonda.md"
+  git add -N "$SONDA_DIR/sonda.md" >/dev/null 2>&1 || true
+  if "$0" >/dev/null 2>&1; then
+    rm -rf "$SONDA_DIR"
+  # `git add -N` deja la intencion de anadir en el indice; sin este reset la
+  # sonda queda como un borrado fantasma en `git status`.
+  git reset -q -- "$SONDA_DIR" >/dev/null 2>&1 || true
+    echo "FALLO: el guardia no detecto la sonda — esta roto" >&2
+    exit 1
+  fi
+  rm -rf "$SONDA_DIR"
+  # `git add -N` deja la intencion de anadir en el indice; sin este reset la
+  # sonda queda como un borrado fantasma en `git status`.
+  git reset -q -- "$SONDA_DIR" >/dev/null 2>&1 || true
+  echo "self-test: el guardia detecta la sonda"
+  exit 0
+fi
+
 RUTAS=(src scripts tests config docs .github)
 FALLOS=0
 
-# Rutas que se excluyen del barrido, como regex de ruta.
-EXCLUIR='^(specs/[^/]+/_|\.github/scripts/leak_guard\.sh$)'
+# Rutas excluidas del barrido. Ojo con el formato: `git grep -n` emite
+# `ruta:linea:contenido`, asi que el patron tiene que anclar en `ruta:` — un `$`
+# tras la ruta no casa nunca, y el guardia terminaria denunciandose a si mismo.
+#
+# Se excluye este propio script porque CONTIENE los patrones que busca; es la
+# unica forma de que un detector de cadenas pueda declarar las cadenas.
+EXCLUIR='^(specs/[^/]+/_|\.github/scripts/leak_guard\.sh:)'
 
 # Ejecuta un patron y reporta. $1 = etiqueta, $2 = regex extendida, $3 = regex de
 # excepciones permitidas (se filtra de los resultados).

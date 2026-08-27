@@ -65,13 +65,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: El guardia detecta una sonda
-        run: |
-          mkdir -p docs/_probe && printf 'host 10.1.2.3\n' > docs/_probe/p.md
-          git add -N docs/_probe/p.md
-          if bash .github/scripts/leak_guard.sh; then
-            echo "::error::leak_guard no detecto la sonda — el guardia esta roto"
-            exit 1
-          fi
-          rm -rf docs/_probe
+        run: bash .github/scripts/leak_guard.sh --self-test
       - name: El arbol esta limpio
         run: bash .github/scripts/leak_guard.sh

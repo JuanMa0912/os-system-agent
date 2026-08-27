@@ -1,0 +1,136 @@
+# config/ask-queries.example.yml
+#
+# Catalogo de intents: la unica lista de preguntas que el agente puede hacerle a
+# la API del portal (spec 006). Copiar a config/ask-queries.yml y ajustar rutas,
+# parametros y plantillas al despliegue real.
+#
+# ESTE FICHERO ES EL CONTROL DE SEGURIDAD, no una comodidad. El modelo nunca
+# construye una URL ni elige un endpoint: solo puede nombrar un `id` que ya
+# existe aqui. Todo lo demas — ruta exacta, metodo, parametros tipados, campos a
+# borrar, plantilla y fecha de corte — sale de este YAML, que se revisa en el
+# diff del PR. Por eso el ejemplo se versiona: aunque el fichero real viva fuera
+# del repo, la estructura y el allowlist de rutas quedan revisables aqui.
+#
+# Reglas que hace cumplir el cargador (src/os_system_agent/ask/intents.py); si
+# alguna se incumple, el catalogo NO CARGA:
+#
+#   * `metodo` solo puede ser GET. El portal no sabe decir "solo lectura": el
+#     mismo permiso de subtablero habilita GET y POST/PATCH, asi que la
+#     distincion la ponemos nosotros y el cliente la vuelve a comprobar.
+#   * `ruta` tiene que ser EXACTA. Nada de prefijos, comodines, plantillas de
+#     path, query string ni URL absoluta.
+#   * `drop_fields` es OBLIGATORIO en cada intent. Una lista vacia explicita
+#     (`[]`) es una decision que se ve en el diff; omitir la clave es descuido.
+#   * `fecha_corte` es OBLIGATORIO. Una cifra sin su fecha engana (RF-04).
+#
+# POR QUE NO ESTA /api/margenes/data:
+# ese path son TRECE endpoints distintos detras de un solo `mode`, y varios
+# (`cliente`, `cliente-facturas`, `vendedor`, `vendedor-facturas`) devuelven NIT
+# de cliente y cedula de vendedor. Conceder el path concede los trece. Aqui esta
+# /api/margenes/meta, que es el pedazo sin datos personales. Si algun dia hace
+# falta el detalle, se anade el `mode` concreto con su `drop_fields`, no el path.
+#
+# NADA DE DATOS PERSONALES en este fichero ni en las respuestas que declara:
+# cedula, nombre, cargo e incidencia estan fuera de alcance (spec 006 §9).
+
+version: 1
+
+# Zona horaria del NEGOCIO, no del host. El repo corre en UTC; un "ayer"
+# calculado en UTC devuelve el dia equivocado durante buena parte de la jornada,
+# en silencio y con cifras plausibles. La zona vive aqui, no en una constante
+# enterrada en el codigo (plan §5).
+zona_horaria: America/Bogota
+
+intents:
+  # ---------------------------------------------------------------------------
+  # "¿Hasta que dia hay venta por item cargada?"
+  # Es la pregunta ancla: da la fecha de corte que usa el resumen de abajo, y es
+  # lo que permite responder "no hay dato para ese rango" en vez de un agregado
+  # parcial disfrazado de completo (RF-05).
+  # ---------------------------------------------------------------------------
+  - id: ventas_item_cobertura
+    descripcion: Hasta que fecha hay ventas por item cargadas en el portal.
+    ruta: /api/ventas-x-item/v2
+    metodo: GET
+    parametros:
+      # `fijo` clava el valor en el catalogo: el modelo no puede cambiarlo. Es lo
+      # que impide que un `mode=meta` se convierta en otro modo sobre la misma
+      # ruta ya permitida.
+      - nombre: mode
+        tipo: enum
+        obligatorio: true
+        valores: [meta]
+        fijo: meta
+      - nombre: empresa
+        tipo: enum
+        obligatorio: false
+        valores: [mercamio, dinastia]
+    # `source` es detalle interno de implementacion del portal ("database-v2").
+    # No aporta nada a la respuesta y no tiene por que salir del proceso.
+    drop_fields: [source]
+    fecha_corte:
+      campo: maxDate
+    plantilla: >-
+      Ventas por item: hay datos del {minDate} al {maxDate} ({totalRows} filas).
+
+  # ---------------------------------------------------------------------------
+  # "¿Cuanto vendimos por item entre X e Y?"
+  # La respuesta NO trae fecha de corte propia: `range` solo repite el rango que
+  # pedimos, que no es lo mismo que hasta donde llego el dato. Por eso toma la
+  # fecha de corte del intent de cobertura.
+  # ---------------------------------------------------------------------------
+  - id: ventas_item_resumen
+    descripcion: Unidades y venta sin impuesto por item en un rango de fechas.
+    ruta: /api/ventas-x-item/v2
+    metodo: GET
+    parametros:
+      - nombre: mode
+        tipo: enum
+        obligatorio: true
+        valores: [summary]
+        fijo: summary
+      - nombre: start
+        tipo: fecha
+        obligatorio: true
+      - nombre: end
+        tipo: fecha
+        obligatorio: true
+      - nombre: empresa
+        tipo: enum
+        obligatorio: false
+        valores: [mercamio, dinastia]
+      # Codigo de sede (id_co). Va como texto porque lleva ceros a la izquierda.
+      - nombre: idCo
+        tipo: texto
+        obligatorio: false
+    drop_fields: [source]
+    fecha_corte:
+      campo: maxDate
+      intent: ventas_item_cobertura
+    plantilla: >-
+      Ventas por item del {start} al {end}: {total} items.
+      Dato con corte al {fecha_corte}.
+
+  # ---------------------------------------------------------------------------
+  # "¿Esta cargado el margen, y hasta cuando?"
+  # Pregunta de operacion pura: es la que evita mirar una cifra de margen que
+  # todavia no incluye ayer.
+  # ---------------------------------------------------------------------------
+  - id: margen_cobertura_carga
+    descripcion: Si la tabla de margen esta lista y hasta que fecha tiene datos.
+    ruta: /api/margenes/meta
+    metodo: GET
+    parametros:
+      - nombre: empresa
+        tipo: enum
+        obligatorio: false
+        valores: [mercamio, dinastia]
+    # `table` nombra la tabla interna, `message`/`error` traen texto crudo del
+    # portal (llega a citar migraciones y rutas de fichero) y `dates` es el
+    # listado dia a dia. Nada de eso debe llegar al modelo, a la plantilla, al
+    # log ni a Telegram.
+    drop_fields: [table, message, error, dates]
+    fecha_corte:
+      campo: maxDate
+    plantilla: >-
+      Margen cargado del {minDate} al {maxDate}: {rowCount} filas, listo={ready}.

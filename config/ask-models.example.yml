@@ -1,0 +1,72 @@
+# config/ask-models.example.yml
+# Ejemplo. Copiar a config/ask-models.yml y ajustar tarifas, tope y modelos.
+# Este fichero SE VERSIONA (plan 006 §3.3): es un control, y un control que vive
+# en un fichero ignorado no se revisa en el diff del PR. Lo unico que queda fuera
+# del repo son las credenciales.
+#
+# El escalonado esta en specs/006-preguntas-portal/plan.md §8:
+#   T0  comando explicito (`/p venta ayer`)  -> ningun modelo, determinista
+#   T1  frase que resuelve por palabras clave -> ningun modelo
+#   T2  frase ambigua                         -> escalon gratuito
+#   T3  lo que T2 no clasifico                -> modelo de pago
+#
+# T0 y T1 no se configuran aqui: no usan modelo, y sus ids estan reservados.
+
+budget:
+  # El tope es en DOLARES, no en numero de turnos: un contador de turnos no
+  # protege de un turno desbocado. El gasto acumulado vive en la tabla
+  # `budget_day` del state store (plan §7) y el router lo lee ANTES de gastar.
+  daily_cap_usd: 1.00
+
+  # La pregunta se recorta antes de salir hacia el modelo. Acota el costo de
+  # entrada y, de paso, cuanto texto del operador sale del proceso.
+  max_question_chars: 500
+
+rungs:
+  # --- T2: escalon gratuito -------------------------------------------------
+  # Suficiente para clasificar contra un enum cerrado, que es todo lo que se le
+  # pide a un modelo en esta spec. Sus tres costos deben ser cero: si un peldano
+  # marcado `free` tuviera tarifa, el gasto no cargaria a ningun tope.
+  - id: T2
+    provider: ollama_cloud
+    model: "<modelo-del-escalon-gratuito>"
+    tier: free
+    max_cost_per_call_usd: 0
+    cost_per_1k_input_usd: 0
+    cost_per_1k_output_usd: 0
+    available: true
+
+  # --- T3: escalon de pago --------------------------------------------------
+  # `max_cost_per_call_usd` es el PEOR CASO que el router reserva contra el tope
+  # antes de hacer la llamada, y lo que carga si la llamada falla sin decir
+  # cuanto consumio. Ponerlo alto no "permite mas": solo hace que el agente
+  # rehuse antes.
+  #
+  # Las tarifas de abajo son un PLACEHOLDER. Hay que ponerlas a la tarifa
+  # vigente del proveedor que se contrate: el router las usa para frenar, no
+  # para facturar, asi que conviene redondearlas hacia arriba.
+  - id: T3
+    provider: "<proveedor>"
+    model: "<modelo-de-pago>"
+    tier: paid
+    max_cost_per_call_usd: 0.05
+    cost_per_1k_input_usd: 0.003
+    cost_per_1k_output_usd: 0.015
+    available: true
+
+  # --- Peldano local: NO DISPONIBLE ----------------------------------------
+  # Verificado con `ollama list`: no hay Ollama instalado en ningun box
+  # (spec §7.6, plan §8). Queda declarado para que la ausencia sea visible en el
+  # fichero en vez de convertirse en un timeout sin explicacion.
+  #
+  # `load_models_config` RECHAZA este proveedor con `available: true`. Cuando de
+  # verdad exista en el box que lo va a usar, se verifica alli primero y se
+  # levanta la guarda en `src/os_system_agent/ask/router.py`.
+  - id: T_LOCAL
+    provider: ollama_local
+    model: "<modelo-local>"
+    tier: free
+    max_cost_per_call_usd: 0
+    cost_per_1k_input_usd: 0
+    cost_per_1k_output_usd: 0
+    available: false

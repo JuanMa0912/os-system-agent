@@ -1,0 +1,209 @@
+# Golden cases for the portal error taxonomy (os_system_agent.portal.errors).
+# Executed by tests/test_portal_errors.py, so these run in CI on every commit.
+#
+# `outcome`  — expected os_system_agent.portal.errors.Outcome
+# `terminal` — whether retrying could ever help. Getting this wrong is what
+#              locks the offices out of the portal for 15 minutes, because the
+#              agent and the offices share an outbound IP.
+# `raises`   — false for OK and NO_DATA: both are valid answers, not failures.
+#
+# Every value below is FAKE. The cookie and password strings exist so the tests
+# can assert they never reach an exception message.
+
+- name: ok_health_publico
+  status: 200
+  headers: {content-type: application/json}
+  body: '{"ok":true,"db":"up","latencyMs":4,"pool":{"total":5,"idle":4}}'
+  outcome: OK
+  terminal: false
+  raises: false
+
+- name: ok_datos_con_fecha_de_corte
+  status: 200
+  headers: {content-type: application/json}
+  body: '{"updatedAt":"2026-08-24T23:59:00-05:00","total":1234567}'
+  outcome: OK
+  terminal: false
+  raises: false
+
+- name: ok_lista_vacia_no_es_asunto_del_cliente
+  # An empty result set is a business fact the intent contract decides on (T6),
+  # not a transport failure. The client passes it through untouched.
+  status: 200
+  headers: {content-type: application/json}
+  body: '[]'
+  outcome: OK
+  terminal: false
+  raises: false
+
+- name: doscientos_con_error_en_el_cuerpo
+  # HTTP success is not business success: the portal answered 200 and still said
+  # it failed. Answering with this would put a lie in front of the operator.
+  status: 200
+  headers: {content-type: application/json}
+  body: '{"error":"consulta invalida","data":null}'
+  outcome: CONTRACT
+  terminal: true
+  raises: true
+
+- name: doscientos_con_ok_false
+  status: 200
+  headers: {content-type: application/json}
+  body: '{"ok":false,"db":"down"}'
+  outcome: CONTRACT
+  terminal: true
+  raises: true
+
+- name: doscientos_con_updatedat_nulo
+  # No cut-off date means no data for that range (RF-04, RF-05). It must be said
+  # out loud, never rendered as a zero or as a partial aggregate.
+  status: 200
+  headers: {content-type: application/json}
+  body: '{"updatedAt":null,"total":0}'
+  outcome: NO_DATA
+  terminal: false
+  raises: false
+
+- name: doscientos_con_updatedat_vacio_anidado
+  status: 200
+  headers: {content-type: application/json}
+  body: '{"data":{"updatedAt":"   ","rows":[]},"meta":{"tz":"America/Bogota"}}'
+  outcome: NO_DATA
+  terminal: false
+  raises: false
+
+- name: doscientos_html_de_login
+  # A session that expired can answer 200 with the login page. Parsing that as
+  # data is how an agent starts reporting nonsense with confidence.
+  status: 200
+  headers: {content-type: text/html}
+  body: '<!doctype html><html><body>Iniciar sesion</body></html>'
+  outcome: CONTRACT
+  terminal: true
+  raises: true
+
+- name: credencial_invalida_401
+  status: 401
+  headers: {content-type: application/json}
+  body: '{"error":"credenciales invalidas"}'
+  outcome: TERMINAL_AUTH
+  terminal: true
+  raises: true
+
+- name: password_caducada_401_dia_30
+  # PASSWORD_MAX_AGE_DAYS = 30: on day 30 requireAuthSession() returns null and
+  # every data route answers 401. Same terminal treatment, different cause.
+  status: 401
+  headers: {content-type: application/json, set-cookie: 'vp_session=deadbeefcafe; Path=/; HttpOnly'}
+  body: '{"error":"password expired","password":"n0-deberia-salir-nunca"}'
+  outcome: TERMINAL_AUTH
+  terminal: true
+  raises: true
+
+- name: cuenta_desactivada_403
+  status: 403
+  headers: {content-type: application/json}
+  body: '{"error":"cuenta desactivada"}'
+  outcome: ACCOUNT_DISABLED
+  terminal: true
+  raises: true
+
+- name: fuera_de_alcance_403
+  # The agent asking for /api/admin/* must land here, not anywhere useful (CA-02).
+  status: 403
+  headers: {content-type: application/json}
+  body: '{"error":"forbidden"}'
+  outcome: ACCOUNT_DISABLED
+  terminal: true
+  raises: true
+
+- name: rate_limit_429_con_retry_after
+  status: 429
+  headers: {retry-after: '900', content-type: application/json}
+  body: '{"error":"demasiados intentos"}'
+  outcome: RATE_LIMITED
+  terminal: true
+  raises: true
+  retry_after_seconds: 900
+
+- name: rate_limit_429_sin_retry_after
+  # No header: fall back to the full 15-minute window. Waiting too long costs a
+  # late answer; waiting too little costs other people their access.
+  status: 429
+  headers: {content-type: application/json}
+  body: '{"error":"demasiados intentos"}'
+  outcome: RATE_LIMITED
+  terminal: true
+  raises: true
+  retry_after_seconds: null
+  effective_retry_after_seconds: 900
+
+- name: rate_limit_429_retry_after_con_fecha_http
+  # The HTTP-date form is not parsed; the fallback window is never shorter.
+  status: 429
+  headers: {retry-after: 'Wed, 26 Aug 2026 10:00:00 GMT'}
+  body: ''
+  outcome: RATE_LIMITED
+  terminal: true
+  raises: true
+  retry_after_seconds: null
+  effective_retry_after_seconds: 900
+
+- name: portal_caido_503
+  status: 503
+  headers: {content-type: application/json}
+  body: '{"ok":false,"db":"down"}'
+  outcome: TRANSIENT
+  terminal: false
+  raises: true
+
+- name: gateway_502
+  status: 502
+  headers: {content-type: text/html}
+  body: '<html>502 Bad Gateway</html>'
+  outcome: TRANSIENT
+  terminal: false
+  raises: true
+
+- name: gateway_timeout_504
+  status: 504
+  headers: {}
+  body: ''
+  outcome: TRANSIENT
+  terminal: false
+  raises: true
+
+- name: error_interno_500
+  status: 500
+  headers: {content-type: application/json}
+  body: '{"error":"internal"}'
+  outcome: TRANSIENT
+  terminal: false
+  raises: true
+
+- name: redireccion_302_no_se_sigue
+  # Redirects are never followed: one could leave the allowlisted host and path,
+  # which would make both allowlists decorative.
+  status: 302
+  headers: {location: 'https://otro.example/login'}
+  body: ''
+  outcome: UNEXPECTED
+  terminal: true
+  raises: true
+
+- name: ruta_inexistente_404
+  status: 404
+  headers: {content-type: application/json}
+  body: '{"error":"not found"}'
+  outcome: UNEXPECTED
+  terminal: true
+  raises: true
+
+- name: sin_contenido_204
+  # 204 is not a data answer. Fail closed rather than guess it meant "empty".
+  status: 204
+  headers: {}
+  body: ''
+  outcome: UNEXPECTED
+  terminal: true
+  raises: true
