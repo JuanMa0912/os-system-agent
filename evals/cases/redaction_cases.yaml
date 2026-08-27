@@ -1,5 +1,15 @@
 # Golden cases for secret redaction (os_system_agent.redaction.redact).
-# `must_not_contain` must be absent from the output. Values below are FAKE.
+#
+# `must_not_contain` must be absent from the output. TODOS LOS VALORES SON
+# FALSOS: se eligen con forma realista para que los patrones se ejerciten de
+# verdad, pero no corresponden a ningun sistema. No pegar aqui un valor real ni
+# siquiera "para probar" — este fichero se versiona.
+#
+# La spec 006 redacta al ESCRIBIR y al LEER, y el agente ahora maneja cookies de
+# sesion del portal, cabeceras de autenticacion y respuestas JSON. Los casos
+# cubren esas formas ademas de las originales.
+
+# --- formas originales (monitoreo de ETL) ---------------------------------
 - name: telegram_bot_token
   input: "bot token 123456789:AAH-abcdefghijklmnopqrstuvwxyz0123456 ready"
   must_not_contain: "AAH-abcdefghijklmnopqrstuvwxyz0123456"
@@ -12,3 +22,94 @@
 - name: env_style_secret
   input: "TELEGRAM_BOT_TOKEN=super-secret-value-xyz"
   must_not_contain: "super-secret-value-xyz"
+
+# --- cookies de sesion del portal (spec 006) ------------------------------
+# La cookie completa es el secreto: `vp_session` da acceso a todo lo que el
+# agente puede leer, sin necesidad de la contrasena.
+- name: set_cookie_header
+  input: "Set-Cookie: vp_session=Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA; HttpOnly; Path=/"
+  must_not_contain: "Zm9vYmFyYmF6cXV4MTIzNDU2Nzg5MA"
+- name: cookie_header_con_varios_pares
+  # Enmascarar solo el primer par dejaria el resto a la vista: una cabecera
+  # Cookie es una lista separada por `;`.
+  input: "Cookie: vp_session=AAAA1111BBBB2222; vp_csrf=CCCC3333DDDD4444"
+  must_not_contain: "CCCC3333DDDD4444"
+- name: csrf_header
+  input: "x-csrf-token: EEEE5555FFFF6666GGGG7777"
+  must_not_contain: "EEEE5555FFFF6666GGGG7777"
+- name: authorization_bearer_header
+  input: "Authorization: Bearer abcdefghijklmnopqrstuvwxyz.0123456789"
+  must_not_contain: "abcdefghijklmnopqrstuvwxyz.0123456789"
+- name: bearer_suelto_en_una_traza
+  input: "curl -H 'Bearer tok_9f8e7d6c5b4a3210fedcba98' https://portal.example.com"
+  must_not_contain: "tok_9f8e7d6c5b4a3210fedcba98"
+- name: api_key_header
+  input: "x-api-key: k_live_0011223344556677889900aa"
+  must_not_contain: "k_live_0011223344556677889900aa"
+
+# --- JSON: el fallo de la v1 ----------------------------------------------
+# El patron exigia el separador pegado a la palabra, asi que `{"password": "x"}`
+# no se redactaba EN ABSOLUTO. Estos casos existen para que no vuelva.
+- name: json_password
+  input: '{"username":"agente","password":"Cl4v3-D3-Prueb4-XYZ"}'
+  must_not_contain: "Cl4v3-D3-Prueb4-XYZ"
+- name: json_api_key_camel_case
+  input: '{"apiKey": "ak_test_112233445566778899", "ttl": 300}'
+  must_not_contain: "ak_test_112233445566778899"
+- name: json_token_anidado
+  input: '{"auth": {"token": "eyJhbGciOiJIUzI1NiJ9.cGF5bG9hZA.c2lnbmF0dXJl"}}'
+  must_not_contain: "eyJhbGciOiJIUzI1NiJ9.cGF5bG9hZA.c2lnbmF0dXJl"
+- name: json_con_valor_que_lleva_espacios
+  input: '{"secret": "una frase larga como contrasena"}'
+  must_not_contain: "una frase larga como contrasena"
+
+# --- otras formas de credencial -------------------------------------------
+- name: jwt_suelto
+  input: "sesion eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.QWJjRGVmR2hpSg terminada"
+  must_not_contain: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxIn0.QWJjRGVmR2hpSg"
+- name: llave_privada_pem
+  input: |
+    -----BEGIN RSA PRIVATE KEY-----
+    MIIEowIBAAKCAQEA1234567890abcdefFAKEFAKEFAKE
+    -----END RSA PRIVATE KEY-----
+  must_not_contain: "MIIEowIBAAKCAQEA1234567890abcdefFAKEFAKEFAKE"
+- name: llave_pem_truncada_a_media_traza
+  # Un log cortado a la mitad sigue llevando material de llave: cerrar el
+  # bloque en fin de texto evita dejar la cola expuesta.
+  input: |
+    -----BEGIN PRIVATE KEY-----
+    MIIBVQIBADANBgkqhkiG9w0BAQEFAASCAT8FAKEFAKE
+  must_not_contain: "MIIBVQIBADANBgkqhkiG9w0BAQEFAASCAT8FAKEFAKE"
+- name: github_token
+  input: "clonando con ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+  must_not_contain: "ghp_0123456789abcdefghijklmnopqrstuvwxyz"
+- name: google_api_key
+  input: "maps key AIzaSyA0000000000000000000000000000000"
+  must_not_contain: "AIzaSyA0000000000000000000000000000000"
+- name: mysql_uri_password
+  input: "mysql://lector:0tr4-Cl4v3-F4ls4@ejemplo.invalid:3306/reporting"
+  must_not_contain: "0tr4-Cl4v3-F4ls4"
+
+# --- datos que no son credencial pero tampoco deben viajar ----------------
+- name: ip_privada_en_una_evidencia
+  # La topologia interna es exactamente lo que leak_guard.sh mantiene fuera del
+  # repo; tampoco debe salir en un reporte de Telegram.
+  input: "no se pudo conectar a 10.20.30.40:5432"
+  must_not_contain: "10.20.30.40"
+- name: correo_nominal
+  input: "notificar a nombre.apellido@empresa.example"
+  must_not_contain: "nombre.apellido@empresa.example"
+
+# --- casos de no-regresion: lo que NO debe redactarse ---------------------
+# Un redactor que tapa demasiado se vuelve ilegible y termina desactivado, que
+# es como mueren los controles. `must_not_contain` se elige de forma que el caso
+# falle si el texto util desaparece.
+- name: no_redacta_una_clave_de_diccionario_inofensiva
+  input: "resultado: {key: ventas, valor: 1234}"
+  must_not_contain: "***REDACTED***"
+- name: no_redacta_una_ruta_con_puntos
+  input: "consultando tabla.columna.sufijo en el reporte"
+  must_not_contain: "***REDACTED***"
+- name: no_redacta_una_ip_publica_de_documentacion
+  input: "el portal responde en 203.0.113.10"
+  must_not_contain: "***REDACTED***"
