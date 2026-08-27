@@ -1,0 +1,31 @@
+# Configuracion de gitleaks para este repo.
+#
+# Se PARTE de las reglas por defecto y solo se anade una excepcion. Nunca
+# reemplazar el conjunto por defecto: perder una regla es perder una deteccion,
+# y no se nota hasta que se filtra algo.
+
+[extend]
+useDefault = true
+
+# Los ficheros del redactor tienen que contener cadenas CON FORMA de secreto:
+# son los casos dorados que prueban que `redact()` las tapa. Sin esta excepcion,
+# gitleaks marca los valores falsos y el CI queda rojo de forma permanente — y
+# un CI cronicamente rojo se ignora, que es peor que no tenerlo.
+#
+# La excepcion es por RUTA y deliberadamente CORTA: son dos ficheros, ambos
+# pequenos y revisados en el diff de cualquier PR que los toque.
+#
+# El hueco que esto abre (gitleaks deja de mirar esos dos ficheros) lo cubre
+# `.github/scripts/leak_guard.sh`, que SI vigila `tests/` y `evals/` buscando
+# llaves privadas, service accounts, IPs internas y nombres de cliente. Ningun
+# camino queda sin al menos un escaner encima.
+#
+# NADA DE VALORES REALES en esos dos ficheros, ni siquiera "para probar":
+# la excepcion existe porque los valores son inventados, y deja de estar
+# justificada en el momento en que uno deje de serlo.
+[allowlist]
+description = "Casos dorados del redactor: valores falsos con forma de secreto"
+paths = [
+  '''evals/cases/redaction_cases\.yaml''',
+  '''tests/test_redaction\.py''',
+]

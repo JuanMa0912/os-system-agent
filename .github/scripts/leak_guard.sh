@@ -40,7 +40,9 @@ if [ "${1:-}" = "--self-test" ]; then
   exit 0
 fi
 
-RUTAS=(src scripts tests config docs .github)
+# `evals` entra porque `.gitleaks.toml` deja de mirar sus casos dorados: alguien
+# tiene que seguir vigilando esa carpeta, aunque sea con otras reglas.
+RUTAS=(src scripts tests config docs evals .github)
 FALLOS=0
 
 # Rutas excluidas del barrido. Ojo con el formato: `git grep -n` emite
@@ -49,7 +51,14 @@ FALLOS=0
 #
 # Se excluye este propio script porque CONTIENE los patrones que busca; es la
 # unica forma de que un detector de cadenas pueda declarar las cadenas.
-EXCLUIR='^(specs/[^/]+/_|\.github/scripts/leak_guard\.sh:)'
+#
+# `evals/cases/redaction_cases.yaml` es la OTRA excepcion, y la unica que
+# tampoco mira gitleaks (ver .gitleaks.toml). Es inevitable: son los casos
+# dorados que prueban que `redact()` tapa cada forma de secreto, asi que el
+# fichero tiene que contenerlas. La proteccion de ese fichero no es un escaner
+# sino su tamano y su revision: si alguna vez crece o deja de ser obviamente
+# falso, la excepcion deja de estar justificada.
+EXCLUIR='^(specs/[^/]+/_|\.github/scripts/leak_guard\.sh:|evals/cases/redaction_cases\.yaml:)'
 
 # Ejecuta un patron y reporta. $1 = etiqueta, $2 = regex extendida, $3 = regex de
 # excepciones permitidas (se filtra de los resultados).
