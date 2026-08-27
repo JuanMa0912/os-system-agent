@@ -95,7 +95,12 @@
   # every data route answers 401. Same terminal treatment, different cause.
   status: 401
   headers: {content-type: application/json, set-cookie: 'vp_session=deadbeefcafe; Path=/; HttpOnly'}
-  body: '{"error":"password expired","password":"n0-deberia-salir-nunca"}'
+  # gitleaks:allow — valor FALSO y a proposito. Es el canario de
+  # test_portal_errors.py: ese test comprueba que esta cadena no aparece en
+  # ningun mensaje de error, asi que tiene que ser distintiva y no se puede
+  # sustituir por un marcador generico. Se exime esta LINEA, no el fichero: el
+  # resto de los casos siguen escaneados.
+  body: '{"error":"password expired","password":"n0-deberia-salir-nunca"}' # gitleaks:allow
   outcome: TERMINAL_AUTH
   terminal: true
   raises: true
