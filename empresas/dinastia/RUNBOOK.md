@@ -17,6 +17,11 @@ Guía rápida paso a paso para operar los 3 ETLs de Dinastia en el box
 > De enero a mayo de 2026 hay ~$41.000 millones de venta que el tablero nunca vio,
 > más todo 2025. **La sede 002 abrió en junio de 2026**: hasta mayo el ERP tiene
 > una sola sede, lo que explica por qué no se puede comparar año contra año.
+>
+> ⚠️ **Y esa historia ya NO es continua (2026-09-21):** `CMMOVIMIENTO_PDV` perdió
+> del **28-jul al 20-ago de 2026** — julio corta en el 27 y agosto arranca en el 21.
+> No es el ETL (el conteo crudo y el que ve el ETL coinciden en todos los días).
+> **GCP es hoy la única copia de esos 24 días: nunca recargues ese rango.**
 
 ---
 
@@ -147,6 +152,48 @@ Tras un cambio que afecte los datos ya cargados (ej. impoconsumo), **recargar**:
 ```bash
 sudo systemctl start dinastia-<x>-monthly.service    # recalcula el mes con el cambio
 ```
+
+---
+
+## 7. Menú de operación y reparador de huecos
+
+Vive en el repo (`~/os-system-agent/empresas/dinastia/tools/`), no en el despliegue:
+se actualiza con `git pull` y lee las configs de `/opt/dinastia-*` sin redesplegar
+nada. Nació del incidente del 2026-09-21 (14 días sin cargar que ninguna ventana
+automática podía ya reparar, y 24 días que el ERP había perdido y solo viven en GCP).
+
+```bash
+cd ~/os-system-agent/empresas/dinastia/tools && ./menu.sh
+```
+
+El menú se rebaja solo a `osagent` si lo lanza root, y carga el `.env` por su cuenta.
+Por debajo son cuatro subcomandos, usables sueltos:
+
+```bash
+set -a; . /etc/dinastia/dinastia.env; set +a
+PY=/opt/dinastia-ventas/.venv/bin/python
+cd ~/os-system-agent/empresas/dinastia/tools
+
+$PY dinastia_ops.py estado --dias 60 --detalle      # compara ERP vs GCP. NO escribe.
+$PY dinastia_ops.py reparar --dias 60               # enseña el plan y se detiene
+$PY dinastia_ops.py reparar --dias 60 --aplicar     # lo ejecuta (pide confirmar)
+$PY dinastia_ops.py cargar ventas 20260827 20260909 # rango explícito (puerta de atrás)
+$PY dinastia_ops.py refrescar margen                # solo vistas
+```
+
+**La regla que lo hace seguro:** `reparar` solo carga días donde ganar es lo único
+que puede pasar — el destino está vacío (`missing`) o tiene filas con la medida en
+cero mientras el origen sí mide (`hollow`, el punto ciego de rotación, que devuelve
+~10.600 filas diarias aunque no haya una venta). Se **niega** a tocar los días donde
+el origen tiene menos que el destino (`source_empty`, `risky_sede`, `risky_measure`):
+los lista y los deja fuera del plan, incluso partiendo un rango en dos para no
+atravesarlos. Las reglas viven en `src/os_system_agent/backfill.py`, con tests.
+
+Cada acción queda en `~/dinastia-ops.jsonl` (usuario, hora, pipeline, rango).
+
+> **Lo que NO hace:** decidir sobre un día bloqueado. Eso es siempre humano, porque
+> recargarlo significa sustituir lo que hay por lo que el ERP tenga hoy — y el
+> 2026-09-21 se comprobó que el ERP puede tener menos.
 
 ---
 
