@@ -158,11 +158,7 @@ def plan_ranges(verdicts: Mapping[str, Verdict]) -> list[tuple[str, str]]:
             runs[-1].append(day)
         else:
             runs.append([day])
-    return [
-        (run[0], run[-1])
-        for run in runs
-        if any(verdicts[d] in WORTH_LOADING for d in run)
-    ]
+    return [(run[0], run[-1]) for run in runs if any(verdicts[d] in WORTH_LOADING for d in run)]
 
 
 def blocked_days(verdicts: Mapping[str, Verdict]) -> list[tuple[str, Verdict]]:
