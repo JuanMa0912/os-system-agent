@@ -69,7 +69,8 @@ def test_collect_live_uses_injected_runner() -> None:
     assert status.delay_minutes is not None and 0 <= status.delay_minutes < 10
     assert "test.service" in status.evidence
     assert calls == [
-        "systemctl show test.service -p Id,Result,ExecMainStatus,ExecMainExitTimestamp,ActiveState"
+        "systemctl show test.service test.timer -p Id,Result,ExecMainStatus,"
+        "ExecMainExitTimestamp,ActiveState,LastTriggerUSec"
     ]
 
 
@@ -98,8 +99,8 @@ def test_collect_live_batches_all_units_into_one_ssh_call() -> None:
 
     assert len(calls) == 1  # ONE SSH round-trip for both units
     assert calls[0] == (
-        "systemctl show a.service b.service -p Id,Result,ExecMainStatus,"
-        "ExecMainExitTimestamp,ActiveState"
+        "systemctl show a.service a.timer b.service b.timer -p Id,Result,ExecMainStatus,"
+        "ExecMainExitTimestamp,ActiveState,LastTriggerUSec"
     )
     assert [s.severity for s in statuses] == [Severity.INFO, Severity.INFO]
     assert "a.service" in statuses[0].evidence
@@ -113,6 +114,40 @@ def test_collect_live_fails_closed_when_unit_missing_from_output() -> None:
     jobs = [_job("a", unit="test.service")]
     statuses = collect_live(jobs, "server232", NOW, runner=runner)
     assert statuses[0].severity is Severity.CRITICAL
+
+
+def test_collect_live_reboot_lost_result_reads_timer_as_warning() -> None:
+    # Real shape from server232 on 2026-10-21, a day after its reboot: the service
+    # lost ExecMainExitTimestamp, the Persistent= timer still knows when it fired.
+    output = (
+        "Result=success\n"
+        "ExecMainExitTimestamp=\n"
+        "ExecMainStatus=0\n"
+        "Id=weekly.service\n"
+        "ActiveState=inactive\n"
+        "\n"
+        "LastTriggerUSec=Sun 2026-07-05 07:09:00 -05\n"  # ~29h before NOW
+        "Result=success\n"
+        "Id=weekly.timer\n"
+        "ActiveState=active\n"
+    )
+
+    def runner(alias: str, command: str) -> CommandResult:
+        return CommandResult(command=command, exit_code=0, stdout=output, stderr="")
+
+    job = EtlJob(
+        id="w",
+        name="Job w",
+        server="testserver",
+        schedule="sáb,dom 07:09",
+        freshness=FreshnessRule(warning_after_minutes=8700, critical_after_minutes=8820),
+        systemd_unit="weekly.service",
+    )
+    status = collect_live([job], "server232", NOW, runner=runner)[0]
+    assert status.severity is Severity.WARNING  # not CRITICAL "never ran", not INFO either
+    assert status.latest_at == datetime(2026, 7, 5, 12, 9, tzinfo=UTC)
+    assert "timer disparó" in status.evidence
+    assert "never ran" not in status.evidence
 
 
 def test_collect_live_skips_jobs_without_a_unit() -> None:

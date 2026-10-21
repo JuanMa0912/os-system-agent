@@ -8,6 +8,7 @@ implementation to test. No new I/O beyond the read-only SSH runner it is given.
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime, timedelta
 
 from os_system_agent.catalog import EtlJob
@@ -17,6 +18,7 @@ from os_system_agent.monitors.systemd import (
     evaluate_systemd,
     parse_multi,
     show_command_multi,
+    timer_for,
 )
 from os_system_agent.reports.daily import render_chat_report, render_daily_report
 from os_system_agent.ssh_client import CommandResult, run_read_only
@@ -43,12 +45,21 @@ def collect_live(
     *,
     runner: Runner = run_read_only,
 ) -> list[JobStatus]:
-    """Read real last-run status over read-only SSH in ONE ``systemctl show`` call."""
+    """Read real last-run status over read-only SSH in ONE ``systemctl show`` call.
+
+    Each service's timer rides in the same call: its ``LastTriggerUSec`` is what
+    tells "lost its result in a reboot" apart from "never ran".
+    """
     pairs: list[tuple[EtlJob, str]] = [(job, job.systemd_unit) for job in jobs if job.systemd_unit]
     if not pairs:
         return []
 
-    units = [unit for _, unit in pairs]
+    units: list[str] = []
+    for _, unit in pairs:
+        units.append(unit)
+        timer = timer_for(unit)
+        if timer:
+            units.append(timer)
     result = runner(alias, show_command_multi(units))
     states = parse_multi(result.stdout)
 
@@ -61,6 +72,9 @@ def collect_live(
             last_exit_at=None,
             active_state=None,
         )
+        timer_state = states.get(timer_for(unit) or "")
+        if timer_state is not None and timer_state.last_trigger_at is not None:
+            state = replace(state, last_trigger_at=timer_state.last_trigger_at)
         statuses.append(evaluate_systemd(job, state, now))
     return statuses
 
