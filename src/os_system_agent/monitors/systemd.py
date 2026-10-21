@@ -24,9 +24,10 @@ _DT_RE = re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\s*([+-]\d{2}(?::?\d{
 
 
 # Properties read per unit. ``Id`` is included in the multi form so each block
-# can be keyed back to its unit regardless of ordering.
+# can be keyed back to its unit regardless of ordering. ``LastTriggerUSec`` only
+# exists on ``.timer`` units; systemctl simply omits it from service blocks.
 _PROPS = "Result,ExecMainStatus,ExecMainExitTimestamp,ActiveState"
-_PROPS_MULTI = f"Id,{_PROPS}"
+_PROPS_MULTI = f"Id,{_PROPS},LastTriggerUSec"
 
 
 def show_command(unit: str) -> str:
@@ -43,6 +44,18 @@ def show_command_multi(units: Sequence[str]) -> str:
     return f"systemctl show {' '.join(units)} -p {_PROPS_MULTI}"
 
 
+def timer_for(unit: str) -> str | None:
+    """Return the ``.timer`` that conventionally triggers ``unit``, if it is a service.
+
+    Every scheduled unit on server232 follows ``foo.service`` <- ``foo.timer``
+    (verified with ``TriggeredBy`` on 2026-10-21, templates included). A timer that
+    does not exist just yields an empty block, so a wrong guess changes nothing.
+    """
+    if unit.endswith(".service"):
+        return unit.removesuffix(".service") + ".timer"
+    return None
+
+
 @dataclass(frozen=True)
 class SystemdState:
     """Parsed last-run state of a systemd unit."""
@@ -52,6 +65,9 @@ class SystemdState:
     exit_status: int | None
     last_exit_at: datetime | None
     active_state: str | None
+    # When the unit's timer last fired. Unlike ``last_exit_at`` it survives a
+    # reboot (Persistent= timers keep it on disk).
+    last_trigger_at: datetime | None = None
 
 
 def _parse_timestamp(value: str) -> datetime | None:
@@ -95,6 +111,7 @@ def _state_from_kv(kv: dict[str, str], unit: str) -> SystemdState:
         exit_status=exit_status,
         last_exit_at=_parse_timestamp(kv.get("ExecMainExitTimestamp", "")),
         active_state=kv.get("ActiveState") or None,
+        last_trigger_at=_parse_timestamp(kv.get("LastTriggerUSec", "")),
     )
 
 
@@ -159,6 +176,35 @@ def evaluate_systemd(job: EtlJob, state: SystemdState, now: datetime) -> JobStat
                 delay_minutes=None,
                 latest_at=None,
                 evidence=f"{state.unit}: en ejecución ({state.active_state})",
+            )
+        if state.last_trigger_at is not None:
+            # systemd keeps ExecMainExitTimestamp in memory only: a reboot wipes it,
+            # while a Persistent= timer keeps LastTriggerUSec on disk. Inactive, no
+            # exit time, but the timer fired => the unit ran before the reboot and
+            # only its outcome was lost. On 2026-10-20 server232 rebooted at 10:16
+            # and the weekend jobs read "never ran" (CRITICAL) until their next run,
+            # up to a week later, with nothing for the operator to do.
+            #
+            # The outcome is unknown, so never INFO: at least WARNING. Freshness from
+            # the trigger still escalates to CRITICAL if the timer stopped firing.
+            delay = (now - state.last_trigger_at).total_seconds() / 60.0
+            severity = classify_freshness(
+                delay,
+                job.freshness.warning_after_minutes,
+                job.freshness.critical_after_minutes,
+            )
+            if severity is Severity.INFO:
+                severity = Severity.WARNING
+            return JobStatus(
+                job_id=job.id,
+                name=job.name,
+                severity=severity,
+                delay_minutes=delay,
+                latest_at=state.last_trigger_at,
+                evidence=(
+                    f"{state.unit}: sin resultado guardado (systemd lo pierde al reiniciar); "
+                    f"el timer disparó {state.last_trigger_at.isoformat()} ({delay:.0f} min)"
+                ),
             )
         # Inactive with every timestamp empty: it has never run. Say it plainly
         # instead of a misleading "succeeded", and fail closed.

@@ -1,7 +1,15 @@
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from os_system_agent.catalog import EtlJob, FreshnessRule
-from os_system_agent.monitors.systemd import evaluate_systemd, parse_state, show_command
+from os_system_agent.monitors.systemd import (
+    evaluate_systemd,
+    parse_multi,
+    parse_state,
+    show_command,
+    show_command_multi,
+    timer_for,
+)
 from os_system_agent.severity import Severity
 from os_system_agent.ssh_client import is_read_only
 
@@ -106,3 +114,54 @@ def test_active_without_exit_timestamp_reports_running_as_info():
     status = evaluate_systemd(DAILY, state, now)
     assert status.severity is Severity.INFO
     assert "en ejecución" in status.evidence
+
+
+def test_timer_for_maps_services_including_templates():
+    assert timer_for("visor-etl-reconcile.service") == "visor-etl-reconcile.timer"
+    assert timer_for("etl-rotacion@mercamio.service") == "etl-rotacion@mercamio.timer"
+    assert timer_for("visor-etl-reconcile.timer") is None
+    assert timer_for("visor-etl-reconcile") is None
+
+
+def test_show_command_multi_with_timers_passes_the_read_only_allowlist():
+    command = show_command_multi(["a.service", "a.timer", "etl-rotacion@mercamio.timer"])
+    assert is_read_only(command) is True
+    assert command.endswith(",LastTriggerUSec")
+
+
+def test_parse_multi_reads_last_trigger_only_from_timer_blocks():
+    states = parse_multi(
+        "Id=a.service\nResult=success\nExecMainExitTimestamp=\nActiveState=inactive\n"
+        "\n"
+        "Id=a.timer\nResult=success\nLastTriggerUSec=Sun 2026-10-18 16:04:47 -05\n"
+        "ActiveState=active\n"
+    )
+    assert states["a.service"].last_trigger_at is None
+    trigger = states["a.timer"].last_trigger_at
+    assert trigger is not None
+    assert trigger.utcoffset() == timedelta(hours=-5)
+
+
+def test_reboot_lost_result_but_timer_fired_is_warning_not_never_ran():
+    """systemd forgets ExecMainExitTimestamp on reboot; the timer remembers.
+
+    On 2026-10-20 server232 rebooted and the weekend jobs read "never ran"
+    (CRITICAL) for days. The outcome is unknown: WARNING, never INFO.
+    """
+    trigger = datetime(2026, 7, 5, 12, 9, tzinfo=UTC)
+    state = replace(parse_state(SHOW_NEVER, "etl-rotacion.service"), last_trigger_at=trigger)
+    now = trigger + timedelta(minutes=30)
+    status = evaluate_systemd(DAILY, state, now)
+    assert status.severity is Severity.WARNING
+    assert status.latest_at == trigger
+    assert status.delay_minutes == 30
+    assert "timer disparó" in status.evidence
+    assert "never ran" not in status.evidence
+
+
+def test_reboot_lost_result_and_timer_stale_is_critical():
+    # The timer itself stopped firing: freshness from the trigger still escalates.
+    trigger = datetime(2026, 7, 5, 12, 9, tzinfo=UTC)
+    state = replace(parse_state(SHOW_NEVER, "etl-rotacion.service"), last_trigger_at=trigger)
+    now = trigger + timedelta(minutes=1600)  # missed a day for a daily job
+    assert evaluate_systemd(DAILY, state, now).severity is Severity.CRITICAL
